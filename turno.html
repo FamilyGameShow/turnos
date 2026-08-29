@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estudios del Sueño - Turnos e Información</title>
+    <title>Solicitud de Turno - Senda Comunidad</title>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",
@@ -20,201 +21,144 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const IMGBB_API_KEY = "ecaea9952d943c3b43e17626fe47f766";
+        const storage = getStorage(app);
 
-        let tieneOrdenMedica = true;
+        window.toggleSeccionOrden = function() {
+            const tieneOrden = document.getElementById('selectTieneOrden').value;
+            const seccionSubir = document.getElementById('seccionSubirOrden');
+            const seccionDatosSinOrden = document.getElementById('seccionDatosSinOrden');
 
-        window.mostrarSeccion = function(seccion) {
-            document.getElementById('menuInicio').style.display = "none";
-            document.getElementById('cajaFormulario').style.display = "none";
-            document.getElementById('cajaInfo').style.display = "none";
-            document.getElementById('cajaExito').style.display = "none";
-
-            if (seccion === 'menu') {
-                document.getElementById('menuInicio').style.display = "block";
-            } else if (seccion === 'turno') {
-                document.getElementById('cajaFormulario').style.display = "block";
-            } else if (seccion === 'info') {
-                document.getElementById('cajaInfo').style.display = "block";
-            }
-        };
-
-        window.alternarModoOrden = function(estado) {
-            tieneOrdenMedica = estado;
-            const seccionConOrden = document.getElementById('seccionConOrden');
-            const seccionSinOrden = document.getElementById('seccionSinOrden');
-            const btnSi = document.getElementById('btnSiOrden');
-            const btnNo = document.getElementById('btnNoOrden');
-
-            if (estado) {
-                seccionConOrden.style.display = "block";
-                seccionSinOrden.style.display = "none";
-                btnSi.style.background = "var(--cyan)";
-                btnSi.style.color = "#000";
-                btnNo.style.background = "#0f172a";
-                btnNo.style.color = "#94a3b8";
+            if (tieneOrden === "si") {
+                seccionSubir.style.display = "block";
+                seccionDatosSinOrden.style.display = "none";
+            } else if (tieneOrden === "no") {
+                seccionSubir.style.display = "none";
+                seccionDatosSinOrden.style.display = "block";
             } else {
-                seccionConOrden.style.display = "none";
-                seccionSinOrden.style.display = "block";
-                btnNo.style.background = "var(--gold)";
-                btnNo.style.color = "#000";
-                btnSi.style.background = "#0f172a";
-                btnSi.style.color = "#94a3b8";
+                seccionSubir.style.display = "none";
+                seccionDatosSinOrden.style.display = "none";
             }
         };
 
-        window.solicitarTurno = async function() {
-            const nombre = document.getElementById('txtNombre').value.trim();
-            const telefono = document.getElementById('txtTelefono').value.trim();
+        window.enviarSolicitud = async function(e) {
+            e.preventDefault();
             const btn = document.getElementById('btnEnviar');
+            btn.innerText = "Enviando solicitud...";
+            btn.disabled = true;
 
-            if (!nombre || !telefono) {
-                alert("Por favor completá tu nombre y teléfono.");
+            const nombre = document.getElementById('nombre').value;
+            const telefono = document.getElementById('telefono').value;
+            const tieneOrden = document.getElementById('selectTieneOrden').value;
+            const esDomicilio = document.getElementById('checkDomicilio').checked;
+
+            if (!tieneOrden) {
+                alert("Por favor indicá si tenés orden médica.");
+                btn.innerText = "Solicitar Turno";
+                btn.disabled = false;
                 return;
             }
 
-            let datosEnvio = {
-                nombre_paciente: nombre,
-                telefono: telefono,
-                con_orden: tieneOrdenMedica,
-                estado: "pendiente",
-                fecha_solicitud: serverTimestamp()
-            };
-
-            btn.innerText = "Procesando solicitud...";
-            btn.disabled = true;
+            let ordenUrl = "";
+            let conOrden = (tieneOrden === "si");
 
             try {
-                if (tieneOrdenMedica) {
+                if (conOrden) {
                     const archivoInput = document.getElementById('archivoOrden');
-                    if (!archivoInput.files || archivoInput.files.length === 0) {
-                        alert("Por favor adjuntá la foto o PDF de la orden médica.");
-                        btn.innerText = "Solicitar Turno 🚀";
-                        btn.disabled = false;
-                        return;
+                    if (archivoInput.files.length > 0) {
+                        const file = archivoInput.files[0];
+                        const storageRef = ref(storage, `ordenes/${Date.now()}_${file.name}`);
+                        const snapshot = await uploadBytes(storageRef, file);
+                        ordenUrl = await getDownloadURL(snapshot.ref);
                     }
-
-                    const formData = new FormData();
-                    formData.append("image", archivoInput.files[0]);
-                    const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-                        method: "POST",
-                        body: formData
-                    });
-                    const resultado = await response.json();
-                    if (!resultado.success) throw new Error("No se pudo subir la imagen.");
-                    datosEnvio.orden_url = resultado.data.url;
-
-                } else {
-                    datosEnvio.edad = document.getElementById('txtEdad').value.trim();
-                    datosEnvio.motivo = document.getElementById('txtMotivo').value.trim();
-                    datosEnvio.obra_social = document.getElementById('txtObraSocial').value.trim();
-                    datosEnvio.es_domicilio = document.getElementById('chkDomicilio').checked;
                 }
 
-                await addDoc(collection(db, "solicitudes_turnos"), datosEnvio);
+                await addDoc(collection(db, "solicitudes_turnos"), {
+                    nombre_paciente: nombre,
+                    telefono: telefono,
+                    con_orden: conOrden,
+                    orden_url: ordenUrl,
+                    edad: document.getElementById('edad').value || "",
+                    motivo: document.getElementById('motivo').value || "",
+                    obra_social: document.getElementById('obraSocial').value || "",
+                    es_domicilio: esDomicilio,
+                    fecha_solicitud: new Date().toISOString()
+                });
 
-                document.getElementById('cajaFormulario').style.display = "none";
-                document.getElementById('cajaExito').style.display = "block";
+                document.getElementById('formTurno').style.display = "none";
+                document.getElementById('mensajeExito').style.display = "block";
 
-            } catch (e) {
-                alert("Hubo un error: " + e.message);
-                btn.innerText = "Solicitar Turno 🚀";
+            } catch (error) {
+                alert("Error al enviar: " + error.message);
+                btn.innerText = "Solicitar Turno";
                 btn.disabled = false;
             }
         };
+
+        window.enviarSolicitudForm = enviarSolicitud;
     </script>
     <style>
         :root { --dark: #0f172a; --card: #1e293b; --cyan: #00f5d4; --gold: #ffd166; }
         * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', sans-serif; }
         body { background: var(--dark); color: #fff; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { max-width: 450px; width: 100%; background: var(--card); padding: 25px; border-radius: 16px; border: 1px solid #334155; }
-        h1 { font-size: 1.3rem; color: var(--cyan); text-align: center; text-transform: uppercase; margin-bottom: 20px; }
-        h2 { font-size: 1rem; color: var(--gold); margin-bottom: 8px; text-transform: uppercase; }
-        p { font-size: 0.85rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 12px; }
-        label { font-size: 0.8rem; color: #94a3b8; font-weight: bold; display: block; margin-bottom: 6px; }
-        input, textarea { width: 100%; padding: 12px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 8px; margin-bottom: 15px; font-size: 0.95rem; }
-        textarea { resize: vertical; height: 80px; }
-        .btn { width: 100%; padding: 14px; background: var(--cyan); color: #000; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-size: 0.9rem; margin-top: 5px; }
-        .btn-secundario { background: #334155; color: #fff; margin-top: 10px; }
-        .selector-orden { display: flex; gap: 8px; margin-bottom: 15px; }
-        .btn-selector { flex: 1; padding: 10px; font-size: 0.75rem; border-radius: 8px; border: 1px solid #334155; font-weight: bold; cursor: pointer; }
-        .info-box { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-bottom: 12px; }
+        .card { background: var(--card); border: 1px solid #334155; padding: 25px; border-radius: 16px; width: 100%; max-width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1 { font-size: 1.2rem; color: var(--cyan); text-align: center; text-transform: uppercase; margin-bottom: 20px; }
+        label { font-size: 0.85rem; color: #94a3b8; font-weight: bold; display: block; margin-top: 12px; margin-bottom: 4px; }
+        input, select, textarea { width: 100%; padding: 10px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 8px; font-size: 0.9rem; }
+        .checkbox-box { display: flex; align-items: center; gap: 10px; margin-top: 15px; background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; cursor: pointer; }
+        .checkbox-box input { width: 18px; height: 18px; accent-color: var(--cyan); }
+        .btn { width: 100%; background: var(--cyan); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 20px; cursor: pointer; text-transform: uppercase; font-size: 0.9rem; }
+        #mensajeExito { display: none; text-align: center; padding: 20px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🌙 Centro de Estudios del Sueño</h1>
+    <div class="card">
+        <h1>Senda Comunidad<br><span style="font-size:0.8rem; color:#fff;">Solicitud de Turno</span></h1>
+        
+        <form id="formTurno" onsubmit="enviarSolicitudForm(event)">
+            <label>Nombre y Apellido:</label>
+            <input type="text" id="nombre" required placeholder="Ej: Juan Pérez">
 
-        <!-- MENÚ PRINCIPAL -->
-        <div id="menuInicio">
-            <p style="text-align: center; margin-bottom: 20px;">Seleccioná una opción para continuar:</p>
-            <button class="btn" onclick="mostrarSeccion('turno')">📋 Solicitar un Turno</button>
-            <button class="btn btn-secundario" onclick="mostrarSeccion('info')">ℹ️ Información sobre los Estudios</button>
-        </div>
+            <label>Teléfono (WhatsApp):</label>
+            <input type="tel" id="telefono" required placeholder="Ej: 2214567890">
 
-        <!-- SECCIÓN DE INFORMACIÓN (FAQ / PREGUNTAS FRECUENTES) -->
-        <div id="cajaInfo" style="display:none;">
-            <h2>¿Cómo son los estudios?</h2>
-            <p>Se realizan durante la noche para monitorear la actividad cerebral, respiración y ritmo cardíaco mientras dormís.</p>
+            <!-- LO PRIMERO: PREGUNTAR SI TIENE ORDEN ANTES DE LO DEMÁS -->
+            <label>¿Tenés orden médica?</label>
+            <select id="selectTieneOrden" onchange="toggleSeccionOrden()" required>
+                <option value="">-- Seleccioná una opción --</option>
+                <option value="si">Sí, tengo la orden</option>
+                <option value="no">No tengo / Es particular</option>
+            </select>
 
-            <h2>¿Se hacen de noche?</h2>
-            <p>Sí, los turnos se programan en horarios nocturnos (por ejemplo, a partir de las 21:00 hs).</p>
-
-            <h2>¿Dónde se realizan?</h2>
-            <p>Atendemos en nuestro consultorio especializado / también realizamos estudios a domicilio según indicación médica.</p>
-
-            <h2>Obras Sociales y Prepagas</h2>
-            <p>Trabajamos mediante sistema de reintegro o con cobertura de obras sociales (consultar por la tuya al solicitar el turno).</p>
-
-            <button class="btn btn-secundario" onclick="mostrarSeccion('menu')">◀ Volver al Menú</button>
-        </div>
-
-        <!-- FORMULARIO DE TURNO -->
-        <div id="cajaFormulario" style="display:none;">
-            <label>Nombre y Apellido</label>
-            <input type="text" id="txtNombre" placeholder="Ej: Juan Pérez">
-            
-            <label>Teléfono (WhatsApp)</label>
-            <input type="text" id="txtTelefono" placeholder="Ej: 2215983871">
-
-            <label>¿Tenés la orden médica?</label>
-            <div class="selector-orden">
-                <button type="button" id="btnSiOrden" class="btn-selector" style="background:var(--cyan); color:#000;" onclick="alternarModoOrden(true)">Sí, la tengo 📄</button>
-                <button type="button" id="btnNoOrden" class="btn-selector" style="background:#0f172a; color:#94a3b8;" onclick="alternarModoOrden(false)">No tengo orden ✍️</button>
+            <!-- OPCIÓN A: SI TIENE ORDEN, SUBE LA FOTO -->
+            <div id="seccionSubirOrden" style="display:none; margin-top: 10px;">
+                <label>Subir foto de la orden médica:</label>
+                <input type="file" id="archivoOrden" accept="image/*">
             </div>
 
-            <!-- SI TIENE ORDEN -->
-            <div id="seccionConOrden">
-                <label>Foto o PDF de la Orden Médica</label>
-                <input type="file" id="archivoOrden" accept="image/*,.pdf" style="padding: 8px; font-size: 0.8rem;">
+            <!-- OPCIÓN B: SI NO TIENE ORDEN, PIDE LOS DATOS EXTRAS -->
+            <div id="seccionDatosSinOrden" style="display:none; margin-top: 10px;">
+                <label>Edad:</label>
+                <input type="number" id="edad" placeholder="Ej: 45">
+
+                <label>Motivo del estudio:</label>
+                <input type="text" id="motivo" placeholder="Ej: Ronquidos / Apneas">
+
+                <label>Obra Social (si tiene):</label>
+                <input type="text" id="obraSocial" placeholder="Ej: IOMA, PAMI, Particular...">
             </div>
 
-            <!-- SI NO TIENE ORDEN -->
-            <div id="seccionSinOrden" style="display:none;">
-                <label>Edad</label>
-                <input type="number" id="txtEdad" placeholder="Ej: 45">
+            <!-- OPCIÓN DE DOMICILIO -->
+            <label class="checkbox-box">
+                <input type="checkbox" id="checkDomicilio">
+                <span>¿El estudio es a domicilio? 🏠</span>
+            </label>
 
-                <label>Motivo de consulta / Diagnóstico</label>
-                <textarea id="txtMotivo" placeholder="Ej: Ronquidos, apneas, cefalea..."></textarea>
+            <button type="submit" id="btnEnviar" class="btn">Solicitar Turno</button>
+        </form>
 
-                <label>Obra Social / Prepaga</label>
-                <input type="text" id="txtObraSocial" placeholder="Ej: IOMA, OSDE, Particular...">
-
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-                    <input type="checkbox" id="chkDomicilio" style="width: 20px; height: 20px; margin-bottom: 0; cursor: pointer;">
-                    <label for="chkDomicilio" style="margin-bottom: 0; color: #fff; cursor: pointer;">¿Solicita estudio a domicilio?</label>
-                </div>
-            </div>
-
-            <button class="btn" id="btnEnviar" onclick="solicitarTurno()">Enviar Solicitud 🚀</button>
-            <button class="btn btn-secundario" onclick="mostrarSeccion('menu')">◀ Volver</button>
-        </div>
-
-        <!-- PANTALLA DE ÉXITO -->
-        <div id="cajaExito" style="display:none; text-align:center;">
-            <h2 style="color: var(--gold); margin-bottom: 10px;">¡Solicitud Recibida!</h2>
-            <p style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 15px;">Nos vamos a comunicar con vos por WhatsApp a la brevedad para coordinar los detalles.</p>
-            <button class="btn btn-secundario" onclick="location.reload()">Volver al Inicio</button>
+        <div id="mensajeExito">
+            <h3 style="color: var(--cyan); margin-bottom: 10px;">¡Solicitud Enviada!</h3>
+            <p style="font-size: 0.9rem; color: #cbd5e1;">Nos vamos a comunicar con vos por WhatsApp a la brevedad para confirmarte el día y la hora de tu estudio.</p>
         </div>
     </div>
 </body>
