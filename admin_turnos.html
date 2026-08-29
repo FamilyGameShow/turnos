@@ -30,7 +30,6 @@
             renderizarCalendario();
         });
 
-        // 1. ESCUCHAR SOLICITUDES DE PACIENTES
         function escucharSolicitudes() {
             onSnapshot(collection(db, "solicitudes_turnos"), (snapshot) => {
                 const contenedor = document.getElementById('listaTurnos');
@@ -45,10 +44,10 @@
                     let t = docSnap.data();
                     let id = docSnap.id;
 
-                    let avisoDomicilio = t.es_domicilio ? `<span style="background:#dc2626; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold;">🏠 REQUIERE DOMICILIO</span>` : ``;
+                    let avisoDomicilio = t.es_domicilio ? `<span style="background:#dc2626; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold;">🏠 DOMICILIO</span>` : ``;
                     let detalleExtra = t.con_orden && t.orden_url ? 
                         `<a href="${t.orden_url}" target="_blank" style="color:var(--cyan); font-size:0.8rem; display:block; margin: 6px 0;">📄 Ver Orden Médica</a>` : 
-                        `<div style="font-size:0.75rem; color:#cbd5e1; background:#0f172a; padding:6px; border-radius:6px; margin: 6px 0;">Edad: ${t.edad || '-'} | Motivo: ${t.motivo || '-'} | OS: ${t.obra_social || 'Sin obra social'}</div>`;
+                        `<div style="font-size:0.75rem; color:#cbd5e1; background:#0f172a; padding:6px; border-radius:6px; margin: 6px 0;">Sin orden | Edad: ${t.edad || '-'} | Motivo: ${t.motivo || '-'} | OS: ${t.obra_social || '-'}</div>`;
 
                     let div = document.createElement('div');
                     div.className = "card-turno";
@@ -71,7 +70,6 @@
             document.getElementById('lblPacienteAsignando').innerText = `Asignando a: ${paciente.nombre_paciente} (${paciente.telefono})`;
             document.getElementById('panelAsignacion').style.display = "block";
             
-            // Si el paciente pidió domicilio, sugerir el campo de precio con un monto de referencia superior
             if (paciente.es_domicilio) {
                 document.getElementById('inputPrecio').value = "350000";
             } else {
@@ -81,7 +79,6 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
 
-        // 2. RENDERIZAR CALENDARIO MENSUAL CON 4 MINI-BLOQUES POR NOCHE
         async function renderizarCalendario() {
             const grid = document.getElementById('gridCalendario');
             const lblMes = document.getElementById('lblMesAnio');
@@ -112,7 +109,6 @@
                 celda.className = "dia-celda";
                 celda.dataset.fecha = idDoc;
 
-                // Estructura interna del día con los 4 mini-bloques (21hs, 23hs, 01hs, 03hs)
                 let htmlMiniBloques = `<div class="numero-dia">${dia}</div><div class="mini-grilla">`;
                 
                 let docSnap = await getDoc(doc(db, "agenda_estados", idDoc));
@@ -123,7 +119,7 @@
                     let bInfo = bloquesData[h];
                     if (bInfo) {
                         let claseMini = bInfo.tipo.includes("LARGO") ? "mini-6hs" : "mini-2hs";
-                        let apellido = bInfo.nombre.split(' ')[0]; // Mostrar apellido o primer nombre cortito
+                        let apellido = bInfo.nombre.split(' ')[0];
                         htmlMiniBloques += `<div class="mini-bloque ${claseMini}" title="${h} - ${bInfo.nombre} (${bInfo.tipo})">${apellido}</div>`;
                     } else {
                         htmlMiniBloques += `<div class="mini-bloque libre" title="${h} - Libre">·</div>`;
@@ -142,13 +138,11 @@
             renderizarCalendario();
         };
 
-        // 3. SELECCIONAR DÍA PARA ASIGNAR O BLOQUEAR
         window.manejarClickDiaCalendario = async function(idFecha) {
             if (pacienteSeleccionado) {
                 document.getElementById('inputFechaElegida').value = idFecha;
                 document.getElementById('selectorHorasBox').style.display = "block";
             } else {
-                // Ver detalle o limpiar fecha si no hay paciente
                 let docSnap = await getDoc(doc(db, "agenda_estados", idFecha));
                 if (docSnap.exists()) {
                     let datos = docSnap.data();
@@ -166,7 +160,6 @@
             }
         };
 
-        // 4. CONFIRMAR ASIGNACIÓN Y GUARDAR EN EL BLOQUE CORRESPONDIENTE
         window.confirmarAsignacionFinal = async function() {
             const fechaId = document.getElementById('inputFechaElegida').value;
             const tipoEstudio = document.getElementById('selectTipoEstudio').value;
@@ -184,7 +177,7 @@
             let diaHoraFinal = `${diasSemana[d.getDay()]} ${dia}/${mes} a las ${horaBloque}`;
             let { id, telefono, nombre_paciente } = pacienteSeleccionado;
 
-            // Generar Tarjeta en Canvas
+            // Generar Imagen con Canvas
             const canvas = document.createElement('canvas');
             canvas.width = 800; canvas.height = 1000;
             const ctx = canvas.getContext('2d');
@@ -223,19 +216,33 @@
 
                 const urlImagen = resultado.data.url;
 
-                // Guardar en Firebase dentro del objeto bloques de esa fecha
+                // Guardar en Firebase bloqueando los espacios necesarios
                 let docRef = doc(db, "agenda_estados", fechaId);
                 let docSnap = await getDoc(docRef);
                 let bloquesExistentes = docSnap.exists() ? docSnap.data().bloques || {} : {};
 
-                bloquesExistentes[horaBloque] = {
-                    nombre: nombre_paciente,
-                    tipo: tipoEstudio
-                };
+                // SI ES UN ESTUDIO LARGO (6HS), BLOQUEA 3 FRANJAS CONSECUTIVAS PARA QUE NO QUEDEN HUECOS
+                if (tipoEstudio.includes("LARGO")) {
+                    const listaHoras = ["21hs", "23hs", "01hs", "03hs"];
+                    let indexInicio = listaHoras.indexOf(horaBloque);
+                    if (indexInicio !== -1) {
+                        for (let i = indexInicio; i < Math.min(indexInicio + 3, listaHoras.length); i++) {
+                            bloquesExistentes[listaHoras[i]] = {
+                                nombre: nombre_paciente,
+                                tipo: tipoEstudio
+                            };
+                        }
+                    }
+                } else {
+                    // Estudio corto de 2hs (ocupa solo 1 bloque)
+                    bloquesExistentes[horaBloque] = {
+                        nombre: nombre_paciente,
+                        tipo: tipoEstudio
+                    };
+                }
 
                 await setDoc(docRef, { bloques: bloquesExistentes });
 
-                // Armar mensaje con costo incluido
                 let textoPrecio = precio ? `\n💰 Costo / Arancel: $${Number(precio).toLocaleString()}` : "";
                 let mensajeWsp = `Hola ${nombre_paciente}! Te escribimos de Estudios del Sueño. Acá tenés tu comprobante (${diaHoraFinal}):${textoPrecio}\n\n${urlImagen}\n\n¡Te esperamos!`;
                 
@@ -258,7 +265,6 @@
         .card-turno { background: var(--card); border: 1px solid #334155; padding: 12px; border-radius: 10px; margin-bottom: 10px; }
         .btn-accion { padding: 8px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; margin-top: 5px; }
 
-        /* Estilo Calendario con Mini-Bloques */
         .calendario-box { background: var(--card); border: 1px solid #334155; padding: 15px; border-radius: 12px; margin-top: 20px; }
         .header-calendario { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .grid-dias-semana { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 0.75rem; color: #94a3b8; font-weight: bold; margin-bottom: 6px; }
@@ -268,7 +274,6 @@
         .dia-celda.vacia { background: transparent; border: none; cursor: default; pointer-events: none; }
         .numero-dia { font-size: 0.75rem; font-weight: bold; color: #94a3b8; text-align: right; }
 
-        /* Mini grilla interior de 4 bloques por noche */
         .mini-grilla { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
         .mini-bloque { font-size: 0.6rem; padding: 1px 3px; border-radius: 3px; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: bold; }
         .mini-bloque.libre { background: #1e293b; color: #475569; }
@@ -284,7 +289,6 @@
     <div class="container">
         <h1>📋 Panel de Solicitudes y Agenda</h1>
 
-        <!-- PANEL DE ASIGNACIÓN -->
         <div id="panelAsignacion">
             <h3 id="lblPacienteAsignando" style="color: var(--gold); font-size: 0.95rem; margin-bottom: 8px;"></h3>
             <p style="font-size: 0.8rem; color: #cbd5e1;">Paso 1: Tocá un día en el calendario de abajo para ubicar el turno.</p>
@@ -299,7 +303,7 @@
                     <option value="ESTUDIO LARGO / APNEAS (6hs)">Estudio Largo / Apneas (6hs)</option>
                 </select>
 
-                <label>Franja Horaria (Bloque):</label>
+                <label>Franja Horaria de Inicio:</label>
                 <select id="selectHoraBloque">
                     <option value="21hs">21:00 hs</option>
                     <option value="23hs">23:00 hs</option>
@@ -314,13 +318,11 @@
             </div>
         </div>
 
-        <!-- SOLICITUDES PENDIENTES -->
         <div style="margin-bottom: 20px;">
             <h3 style="font-size: 1rem; color: var(--cyan); margin-bottom: 8px;">Solicitudes Pendientes</h3>
             <div id="listaTurnos"></div>
         </div>
 
-        <!-- CALENDARIO MENSUAL CON 4 MINI-BLOQUES -->
         <div class="calendario-box">
             <div class="header-calendario">
                 <button class="btn-accion" style="background:#334155;" onclick="cambiarMes(-1)">◀ Mes Ant</button>
@@ -331,7 +333,6 @@
                 <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
             </div>
             <div id="gridCalendario" class="grid-mes"></div>
-            <p style="font-size: 0.7rem; color: #94a3b8; text-align: center; margin-top: 12px;">💡 Tip: Cada día muestra 4 rayitas (21hs, 23hs, 01hs, 03hs). Si tocás un día sin seleccionar paciente, podés ver o limpiar los turnos.</p>
         </div>
     </div>
 </body>
