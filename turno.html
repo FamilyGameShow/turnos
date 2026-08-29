@@ -121,21 +121,27 @@
             <label>Teléfono (WhatsApp):</label>
             <input type="tel" id="telefono" required placeholder="Ej: 2214567890">
 
-            <!-- LO PRIMERO: PREGUNTAR SI TIENE ORDEN ANTES DE LO DEMÁS -->
-            <label>¿Tenés orden médica?</label>
+            <!-- 1. PRIMERO LA OPCIÓN DE DOMICILIO PARA QUE CUALQUIERA PUEDA TILDARLA -->
+            <label class="checkbox-box">
+                <input type="checkbox" id="checkDomicilio">
+                <span>¿El estudio es a domicilio? 🏠</span>
+            </label>
+
+            <!-- 2. DESPUÉS LA PREGUNTA DE LA ORDEN MÉDICA -->
+            <label style="margin-top: 15px;">¿Tenés orden médica?</label>
             <select id="selectTieneOrden" onchange="toggleSeccionOrden()" required>
                 <option value="">-- Seleccioná una opción --</option>
                 <option value="si">Sí, tengo la orden</option>
                 <option value="no">No tengo / Es particular</option>
             </select>
 
-            <!-- OPCIÓN A: SI TIENE ORDEN, SUBE LA FOTO -->
+            <!-- SI TIENE ORDEN, SUBE LA FOTO -->
             <div id="seccionSubirOrden" style="display:none; margin-top: 10px;">
                 <label>Subir foto de la orden médica:</label>
                 <input type="file" id="archivoOrden" accept="image/*">
             </div>
 
-            <!-- OPCIÓN B: SI NO TIENE ORDEN, PIDE LOS DATOS EXTRAS -->
+            <!-- SI NO TIENE ORDEN, PIDE LOS DATOS EXTRAS -->
             <div id="seccionDatosSinOrden" style="display:none; margin-top: 10px;">
                 <label>Edad:</label>
                 <input type="number" id="edad" placeholder="Ej: 45">
@@ -147,18 +153,12 @@
                 <input type="text" id="obraSocial" placeholder="Ej: IOMA, PAMI, Particular...">
             </div>
 
-            <!-- OPCIÓN DE DOMICILIO -->
-            <label class="checkbox-box">
-                <input type="checkbox" id="checkDomicilio">
-                <span>¿El estudio es a domicilio? 🏠</span>
-            </label>
-
             <button type="submit" id="btnEnviar" class="btn">Solicitar Turno</button>
         </form>
 
         <div id="mensajeExito">
-            <h3 style="color: var(--cyan); margin-bottom: 10px;">¡Solicitud Enviada!</h3>
-            <p style="font-size: 0.9rem; color: #cbd5e1;">Nos vamos a comunicar con vos por WhatsApp a la brevedad para confirmarte el día y la hora de tu estudio.</p>
+            <h3 style="color: var(--cyan); margin-bottom: 0px;">¡Solicitud Enviada!</h3>
+            <p style="font-size: 0.9rem; color: #cbd5e1; margin-top: 10px;">Nos vamos a comunicar con vos por WhatsApp a la brevedad para confirmarte el día y la hora de tu estudio.</p>
         </div>
     </div>
 </body>
