@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Dra. - Senda Comunidad</title>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+        import { getFirestore, collection, doc, getDoc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",
+            authDomain: "family-game-show.firebaseapp.com",
+            projectId: "family-game-show",
+            storageBucket: "family-game-show.firebasestorage.app",
+            messagingSenderId: "509983775898",
+            appId: "1:509983775898:web:47695f5b312553d9bd1323",
+            measurementId: "G-P941BVG2ST"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let fechaActualCalendario = new Date();
+
+        window.addEventListener('DOMContentLoaded', () => {
+            renderizarCalendarioDra();
+        });
+
+        async function renderizarCalendarioDra() {
+            const grid = document.getElementById('gridCalendario');
+            const lblMes = document.getElementById('lblMesAnio');
+            grid.innerHTML = "";
+
+            let anio = fechaActualCalendario.getFullYear();
+            let mes = fechaActualCalendario.getMonth();
+
+            const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            lblMes.innerText = `${nombresMeses[mes]} ${anio}`;
+
+            let primerDiaIndex = new Date(anio, mes, 1).getDay();
+            let espaciosVacios = primerDiaIndex === 0 ? 6 : primerDiaIndex - 1;
+            let totalDiasMes = new Date(anio, mes + 1, 0).getDate();
+
+            for (let i = 0; i < espaciosVacios; i++) {
+                let vacio = document.createElement('div');
+                vacio.className = "dia-celda vacia";
+                grid.appendChild(vacio);
+            }
+
+            for (let dia = 1; dia <= totalDiasMes; dia++) {
+                let mesStr = String(mes + 1).padStart(2, '0');
+                let diaStr = String(dia).padStart(2, '0');
+                let idDoc = `${anio}-${mesStr}-${diaStr}`;
+
+                let fechaObj = new Date(anio, mes, dia);
+                let esJueves = (fechaObj.getDay() === 4); // 4 = Jueves
+
+                let celda = document.createElement('div');
+                celda.className = esJueves ? "dia-celda es-jueves" : "dia-celda";
+                celda.dataset.fecha = idDoc;
+
+                let htmlMiniBloques = `<div class="numero-dia">${dia} ${esJueves ? '⭐' : ''}</div><div class="mini-grilla">`;
+                
+                let docSnap = await getDoc(doc(db, "agenda_estados", idDoc));
+                let bloquesData = docSnap.exists() ? docSnap.data().bloques || {} : {};
+
+                const horas = ["21hs", "23hs", "01hs", "03hs"];
+                horas.forEach(h => {
+                    let bInfo = bloquesData[h];
+                    if (bInfo) {
+                        let claseMini = bInfo.tipo.includes("LARGO") ? "mini-6hs" : "mini-2hs";
+                        let apellido = bInfo.nombre.split(' ')[0];
+                        htmlMiniBloques += `<div class="mini-bloque ${claseMini}" title="${h} - ${bInfo.nombre} (${bInfo.tipo})">${apellido}</div>`;
+                    } else {
+                        htmlMiniBloques += `<div class="mini-bloque libre" title="${h} - Libre">·</div>`;
+                    }
+                });
+                htmlMiniBloques += `</div>`;
+                celda.innerHTML = htmlMiniBloques;
+
+                // Al hacer clic, ella puede ver el detalle de los turnos de ese día o hacer un cambio excepcional
+                celda.onclick = () => verDetalleDia(idDoc, bloquesData);
+                grid.appendChild(celda);
+            }
+        }
+
+        window.cambiarMes = function(dir) {
+            fechaActualCalendario.setMonth(fechaActualCalendario.getMonth() + dir);
+            renderizarCalendarioDra();
+        };
+
+        window.verDetalleDia = function(idFecha, bloques) {
+            let info = `📅 Fecha: ${idFecha}\n\nTurnos agendados:\n`;
+            let hayTurnos = false;
+            for (let h in bloques) {
+                if (bloques[h]) {
+                    hayTurnos = true;
+                    info += `• ${h}: ${bloques[h].nombre} (${bloques[h].tipo})\n`;
+                }
+            }
+            if (!hayTurnos) {
+                info += "No hay turnos asignados en este día.";
+            }
+            alert(info);
+        };
+    </script>
+    <style>
+        :root { --dark: #0f172a; --card: #1e293b; --cyan: #00f5d4; --gold: #ffd166; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', sans-serif; }
+        body { background: var(--dark); color: #fff; padding: 15px; }
+        .container { max-width: 680px; margin: 0 auto; }
+        h1 { font-size: 1.3rem; color: var(--cyan); text-align: center; text-transform: uppercase; margin-bottom: 5px; }
+        p.sub { font-size: 0.8rem; color: #94a3b8; text-align: center; margin-bottom: 15px; }
+        
+        .calendario-box { background: var(--card); border: 1px solid #334155; padding: 15px; border-radius: 12px; margin-top: 10px; }
+        .header-calendario { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .btn-accion { padding: 8px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; background: #334155; color: #fff; }
+        
+        .grid-dias-semana { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 0.75rem; color: #94a3b8; font-weight: bold; margin-bottom: 6px; }
+        .grid-mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+        
+        .dia-celda { background: #0f172a; border: 1px solid #334155; min-height: 75px; border-radius: 6px; padding: 4px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; }
+        .dia-celda.es-jueves { border-color: var(--gold); background: #162032; }
+        .dia-celda.vacia { background: transparent; border: none; cursor: default; pointer-events: none; }
+        .numero-dia { font-size: 0.75rem; font-weight: bold; color: var(--gold); text-align: right; }
+
+        .mini-grilla { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+        .mini-bloque { font-size: 0.6rem; padding: 1px 3px; border-radius: 3px; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: bold; }
+        .mini-bloque.libre { background: #1e293b; color: #475569; }
+        .mini-bloque.mini-2hs { background: #1e3a8a; color: #93c5fd; border: 1px solid #3b82f6; }
+        .mini-bloque.mini-6hs { background: #064e3b; color: #6ee7b7; border: 1px solid #10b981; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Panel de Turnos - Dra.</h1>
+        <p class="sub">Visualización de agenda (Días Jueves destacados ⭐)</p>
+
+        <div class="calendario-box">
+            <div class="header-calendario">
+                <button class="btn-accion" onclick="cambiarMes(-1)">◀ Mes Ant</button>
+                <h3 id="lblMesAnio" style="color: var(--gold); font-size: 1rem;"></h3>
+                <button class="btn-accion" onclick="cambiarMes(1)">Mes Sig ▶</button>
+            </div>
+            <div class="grid-dias-semana">
+                <div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div><div>Dom</div>
+            </div>
+            <div id="gridCalendario" class="grid-mes"></div>
+            <p style="font-size: 0.7rem; color: #94a3b8; text-align: center; margin-top: 12px;">💡 Tocá cualquier día marcado para ver el detalle de los pacientes de esa noche.</p>
+        </div>
+    </div>
+</body>
+</html>
