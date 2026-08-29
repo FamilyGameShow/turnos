@@ -69,24 +69,20 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
 
-        async function renderizarCalendario() {
+     async function renderizarCalendario() {
             const grid = document.getElementById('gridCalendario');
             const lblMes = document.getElementById('lblMesAnio');
             grid.innerHTML = "";
 
             let anio = fechaActualCalendario.getFullYear();
-            let mes = fechaActualCalendario.getMonth(); // 0 a 11
+            let mes = fechaActualCalendario.getMonth(); 
 
             const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
             lblMes.innerText = `${nombresMeses[mes]} ${anio}`;
 
-            // Obtener el primer día del mes de forma segura
-            let primerDia = new Date(anio, mes, 1);
-            let primerDiaIndex = primerDia.getDay(); // 0 (Domingo) a 6 (Sábado)
-            let totalDiasMes = new Date(anio, mes + 1, 0).getDate();
-
-            // Ajustar para que la semana empiece en Lunes (si es Domingo [0], pasa a ser 6, sino se resta 1)
+            let primerDiaIndex = new Date(anio, mes, 1).getDay();
             let espaciosVacios = primerDiaIndex === 0 ? 6 : primerDiaIndex - 1;
+            let totalDiasMes = new Date(anio, mes + 1, 0).getDate();
 
             // Rellenar espacios vacíos previos
             for (let i = 0; i < espaciosVacios; i++) {
@@ -106,7 +102,6 @@
                 celda.innerText = dia;
                 celda.dataset.fecha = idDoc;
 
-                // Consultar estado en Firebase
                 let docSnap = await getDoc(doc(db, "agenda_estados", idDoc));
                 if (docSnap.exists()) {
                     let datos = docSnap.data();
