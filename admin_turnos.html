@@ -69,7 +69,6 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         };
 
-        // 2. RENDERIZAR CALENDARIO MES A MES (TIPO TABLERO)
         async function renderizarCalendario() {
             const grid = document.getElementById('gridCalendario');
             const lblMes = document.getElementById('lblMesAnio');
@@ -81,20 +80,22 @@
             const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
             lblMes.innerText = `${nombresMeses[mes]} ${anio}`;
 
-            let primerDiaIndex = new Date(anio, mes, 1).getDay(); // Día de la semana
+            // Obtener el primer día del mes de forma segura
+            let primerDia = new Date(anio, mes, 1);
+            let primerDiaIndex = primerDia.getDay(); // 0 (Domingo) a 6 (Sábado)
             let totalDiasMes = new Date(anio, mes + 1, 0).getDate();
 
-            // Ajustar para que la semana empiece en Lunes (1)
-            primerDiaIndex = primerDiaIndex === 0 ? 6 : primerDiaIndex - 1;
+            // Ajustar para que la semana empiece en Lunes (si es Domingo [0], pasa a ser 6, sino se resta 1)
+            let espaciosVacios = primerDiaIndex === 0 ? 6 : primerDiaIndex - 1;
 
-            // Rellenar espacios vacíos previos al 1 del mes
-            for (let i = 0; i < primerDiaIndex; i++) {
+            // Rellenar espacios vacíos previos
+            for (let i = 0; i < espaciosVacios; i++) {
                 let vacio = document.createElement('div');
                 vacio.className = "dia-celda vacia";
                 grid.appendChild(vacio);
             }
 
-            // Cargar estados guardados en Firebase para este mes
+            // Cargar los días del mes
             for (let dia = 1; dia <= totalDiasMes; dia++) {
                 let mesStr = String(mes + 1).padStart(2, '0');
                 let diaStr = String(dia).padStart(2, '0');
@@ -109,8 +110,10 @@
                 let docSnap = await getDoc(doc(db, "agenda_estados", idDoc));
                 if (docSnap.exists()) {
                     let datos = docSnap.data();
-                    celda.classList.add(datos.claseColor); // ej: 'ocupado-2hs', 'ocupado-6hs', 'bloque-personal'
-                    celda.title = datos.detalle || '';
+                    if (datos.claseColor) {
+                        celda.classList.add(datos.claseColor);
+                        celda.title = datos.detalle || '';
+                    }
                 }
 
                 celda.onclick = () => manejarClickCelda(idDoc, celda);
