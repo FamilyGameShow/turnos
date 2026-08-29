@@ -23,6 +23,12 @@
         const db = getFirestore(app);
         const storage = getStorage(app);
 
+        window.toggleDomicilioAviso = function() {
+            const esDomicilio = document.getElementById('checkDomicilio').checked;
+            const aviso = document.getElementById('avisoCostoDomicilio');
+            aviso.style.display = esDomicilio ? "block" : "none";
+        };
+
         window.toggleSeccionOrden = function() {
             const tieneOrden = document.getElementById('selectTieneOrden').value;
             const seccionSubir = document.getElementById('seccionSubirOrden');
@@ -106,6 +112,7 @@
         input, select, textarea { width: 100%; padding: 10px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 8px; font-size: 0.9rem; }
         .checkbox-box { display: flex; align-items: center; gap: 10px; margin-top: 15px; background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; cursor: pointer; }
         .checkbox-box input { width: 18px; height: 18px; accent-color: var(--cyan); }
+        .aviso-domicilio { background: rgba(220, 38, 38, 0.15); border: 1px solid #dc2626; color: #fca5a5; padding: 10px; border-radius: 6px; font-size: 0.78rem; margin-top: 6px; display: none; }
         .btn { width: 100%; background: var(--cyan); color: #000; border: none; padding: 12px; border-radius: 8px; font-weight: bold; margin-top: 20px; cursor: pointer; text-transform: uppercase; font-size: 0.9rem; }
         #mensajeExito { display: none; text-align: center; padding: 20px; }
     </style>
@@ -121,18 +128,21 @@
             <label>Teléfono (WhatsApp):</label>
             <input type="tel" id="telefono" required placeholder="Ej: 2214567890">
 
-            <!-- 1. PRIMERO LA OPCIÓN DE DOMICILIO PARA QUE CUALQUIERA PUEDA TILDARLA -->
+            <!-- INTERRUPTOR DE DOMICILIO SIEMPRE VISIBLE -->
             <label class="checkbox-box">
-                <input type="checkbox" id="checkDomicilio">
-                <span>¿El estudio es a domicilio? 🏠</span>
+                <input type="checkbox" id="checkDomicilio" onchange="toggleDomicilioAviso()">
+                <span>¿Deseo realizar el estudio a domicilio? 🏠</span>
             </label>
+            <div id="avisoCostoDomicilio" class="aviso-domicilio">
+                ⚠️ <strong>Aviso importante:</strong> El estudio a domicilio cuenta con un costo/recargo adicional respecto a la atención en consultorio.
+            </div>
 
-            <!-- 2. DESPUÉS LA PREGUNTA DE LA ORDEN MÉDICA -->
+            <!-- SEGUNDA INSTANCIA: ORDEN MÉDICA -->
             <label style="margin-top: 15px;">¿Tenés orden médica?</label>
             <select id="selectTieneOrden" onchange="toggleSeccionOrden()" required>
                 <option value="">-- Seleccioná una opción --</option>
                 <option value="si">Sí, tengo la orden</option>
-                <option value="no">No tengo / Es particular</option>
+                <option value="no">No, no la tengo</option>
             </select>
 
             <!-- SI TIENE ORDEN, SUBE LA FOTO -->
@@ -149,8 +159,8 @@
                 <label>Motivo del estudio:</label>
                 <input type="text" id="motivo" placeholder="Ej: Ronquidos / Apneas">
 
-                <label>Obra Social (si tiene):</label>
-                <input type="text" id="obraSocial" placeholder="Ej: IOMA, PAMI, Particular...">
+                <label>Obra Social (o si es Particular):</label>
+                <input type="text" id="obraSocial" placeholder="Ej: IOMA, Particular, etc.">
             </div>
 
             <button type="submit" id="btnEnviar" class="btn">Solicitar Turno</button>
