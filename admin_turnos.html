@@ -225,35 +225,34 @@
         };
     </script>
     <style>
-        :root { --dark: #0f172a; --card: #1e293b; --cyan: #00f5d4; --gold: #ffd166; }
-        * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', sans-serif; }
-        body { background: var(--dark); color: #fff; padding: 15px; }
-        .container { max-width: 650px; margin: 0 auto; }
-        h1 { font-size: 1.3rem; color: var(--cyan); text-align: center; text-transform: uppercase; margin-bottom: 15px; }
-        
-        .card-turno { background: var(--card); border: 1px solid #334155; padding: 12px; border-radius: 10px; margin-bottom: 10px; }
-        .btn-accion { padding: 8px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; margin-top: 5px; }
+    :root { --dark: #0f172a; --card: #1e293b; --cyan: #00f5d4; --gold: #ffd166; }
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', sans-serif; }
+    body { background: var(--dark); color: #fff; padding: 15px; }
+    .container { max-width: 650px; margin: 0 auto; }
+    h1 { font-size: 1.3rem; color: var(--cyan); text-align: center; text-transform: uppercase; margin-bottom: 15px; }
+    
+    .card-turno { background: var(--card); border: 1px solid #334155; padding: 12px; border-radius: 10px; margin-bottom: 10px; }
+    .btn-accion { padding: 8px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.75rem; text-transform: uppercase; margin-top: 5px; }
 
-        /* Estilo Calendario Tablero */
-        .calendario-box { background: var(--card); border: 1px solid #334155; padding: 15px; border-radius: 12px; margin-top: 20px; }
-        .header-calendario { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .grid-dias-semana { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 0.75rem; color: #94a3b8; font-weight: bold; margin-bottom: 6px; }
-        .grid-mes { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-        .dia-celda { background: #0f172a; border: 1px solid #334155; height: 50px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; cursor: pointer; position: relative; font-weight: bold; }
-        .dia-celda.vacia { background: transparent; border: none; cursor: default; }
-        
-        /* Colores de Estado del Tablero */
-        .ocupado-2hs { background: #1e3a8a !important; border-color: #3b82f6 !important; color: #93c5fd; }
-        .ocupado-6hs { background: #064e3b !important; border-color: #10b981 !important; color: #6ee7b7; }
-        .bloque-personal { background: #7c2d12 !important; border-color: #f97316 !important; color: #fdba74; }
-        .bloque-banda { background: #581c87 !important; border-color: #a855f7 !important; color: #d8b4fe; }
-        .bloque-enfermo { background: #831843 !important; border-color: #ec4899 !important; color: #fbcfe8; }
+    /* Estilo Calendario Tablero */
+    .calendario-box { background: var(--card); border: 1px solid #334155; padding: 15px; border-radius: 12px; margin-top: 20px; }
+    .header-calendario { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .grid-dias-semana { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; font-size: 0.75rem; color: #94a3b8; font-weight: bold; margin-bottom: 6px; }
+    .grid-mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+    .dia-celda { background: #0f172a; border: 1px solid #334155; height: 45px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; cursor: pointer; font-weight: bold; }
+    .dia-celda.vacia { background: transparent; border: none; cursor: default; pointer-events: none; }
+    
+    /* Colores de Estado del Tablero */
+    .ocupado-2hs { background: #1e3a8a !important; border-color: #3b82f6 !important; color: #93c5fd; }
+    .ocupado-6hs { background: #064e3b !important; border-color: #10b981 !important; color: #6ee7b7; }
+    .bloque-personal { background: #7c2d12 !important; border-color: #f97316 !important; color: #fdba74; }
+    .bloque-banda { background: #581c87 !important; border-color: #a855f7 !important; color: #d8b4fe; }
+    .bloque-enfermo { background: #831843 !important; border-color: #ec4899 !important; color: #fbcfe8; }
 
-        /* Panel de Asignación Activa */
-        #panelAsignacion { background: #1e293b; border: 2px solid var(--gold); padding: 15px; border-radius: 12px; margin-bottom: 20px; display: none; }
-        label { font-size: 0.8rem; color: #94a3b8; font-weight: bold; display: block; margin-top: 8px; }
-        select, input { width: 100%; padding: 8px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 6px; margin-top: 4px; }
-    </style>
+    #panelAsignacion { background: #1e293b; border: 2px solid var(--gold); padding: 15px; border-radius: 12px; margin-bottom: 20px; display: none; }
+    label { font-size: 0.8rem; color: #94a3b8; font-weight: bold; display: block; margin-top: 8px; }
+    select, input { width: 100%; padding: 8px; background: #0f172a; color: white; border: 1px solid #334155; border-radius: 6px; margin-top: 4px; }
+</style>
 </head>
 <body>
     <div class="container">
