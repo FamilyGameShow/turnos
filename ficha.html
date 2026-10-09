@@ -1,0 +1,83 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Ficha SENDA - PSG NOC</title>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
+const app=initializeApp(firebaseConfig);const db=getFirestore(app);
+let nro=new URLSearchParams(window.location.search).get('id');
+window.addEventListener('DOMContentLoaded',async()=>{
+ if(!nro){document.getElementById('lblNro').innerText='NUEVO';return;}
+ document.getElementById('lblNro').innerText=nro;
+ let snap=await getDoc(doc(db,"pacientes_senda",nro));
+ if(snap.exists()){let d=snap.data();for(let k in d){let el=document.getElementById(k);if(el){if(el.type==='checkbox')el.checked=d[k];else el.value=d[k]||'';}}}
+});
+window.guardar=async()=>{
+ let data={};document.querySelectorAll('[id]').forEach(el=>{if(el.type==='checkbox')data[el.id]=el.checked;else if(el.id)data[el.id]=el.value;});
+ let id=document.getElementById('nro_estudio').value||nro||Date.now().toString().slice(-6);
+ data.estado=document.getElementById('estado').value;data.ultima=new Date().toISOString();
+ await setDoc(doc(db,"pacientes_senda",id),data,{merge:true});
+ alert('Ficha guardada '+id+' Estado:'+data.estado);
+};
+window.tab=(t)=>{document.querySelectorAll('.tab').forEach(x=>x.style.display='none');document.getElementById('tab_'+t).style.display='block';document.querySelectorAll('.bt').forEach(b=>b.classList.remove('ac'));document.getElementById('bt_'+t).classList.add('ac');};
+</script>
+<style>
+:root{--d:#0f172a;--c:#1e293b;--cy:#00f5d4;--g:#ffd166;--l:#334155}
+*{box-sizing:border-box;font-family:Segoe UI,sans-serif}body{background:var(--d);color:#fff;padding:8px;margin:0}
+.box{max-width:1000px;margin:0 auto;background:var(--c);border:1px solid var(--l);border-radius:12px;padding:12px}
+h1{color:var(--cy);font-size:1rem;text-align:center;margin:4px 0}
+.tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.bt{padding:7px 10px;border-radius:7px;border:1px solid var(--l);background:#0f172a;color:#94a3b8;font-weight:bold;font-size:0.7rem;cursor:pointer}
+.bt.ac{background:var(--cy);color:#000}
+.tab{display:none}table{width:100%;border-collapse:collapse;font-size:0.75rem}td{border:1px solid var(--l);padding:3px}
+.lb{background:#0f172a;color:var(--g);font-weight:bold;width:90px}input,select{width:100%;background:#0f172a;color:#fff;border:1px solid var(--l);border-radius:4px;padding:4px;font-size:0.75rem}
+.sv{width:100%;background:var(--cy);color:#000;border:none;padding:10px;border-radius:8px;font-weight:bold;margin-top:10px;cursor:pointer}
+</style></head><body><div class="box">
+<h1>FICHA SENDA COMUNIDAD - N° <span id="lblNro"></span> - PSG NOC</h1>
+<div class="tabs">
+<button id="bt_datos" class="bt ac" onclick="tab('datos')">1.DATOS PACIENTE</button>
+<button id="bt_tec" class="bt" onclick="tab('tec')">2.TECNICO / ESTUDIO</button>
+<button id="bt_plata" class="bt" onclick="tab('plata')">3.PLATA SOLO VOS</button>
+<button id="bt_est" class="bt" onclick="tab('est')">4.ESTADO / INFORME</button>
+</div>
+<div id="tab_datos" class="tab" style="display:block">
+<table>
+<tr><td class="lb">APELLIDOS</td><td colspan="2"><input id="apellidos"></td><td class="lb">NOMBRES</td><td colspan="2"><input id="nombres"></td><td class="lb">DNI</td><td><input id="dni"></td></tr>
+<tr><td class="lb">ESTUDIO</td><td><select id="tipo_estudio"><option>PSG NOC</option><option>EEG 1H</option><option>APNEAS 6HS</option><option>POLI DOM 6HS</option></select></td><td class="lb">N°</td><td><input id="nro_estudio"></td><td class="lb">FECHA</td><td><input id="fecha" type="date"></td><td class="lb">HORA</td><td><input id="hora" value="23:00"></td></tr>
+<tr><td class="lb">OBRA SOCIAL</td><td><input id="obra_social" value="IOMA"></td><td class="lb">N° AFIL</td><td colspan="2"><input id="nro_afiliado"></td><td class="lb">TEL</td><td colspan="2"><input id="telefono"></td></tr>
+<tr><td class="lb">F.NAC</td><td><input id="fecha_nac" type="date"></td><td class="lb">EDAD</td><td><input id="edad"></td><td class="lb">LOCALIDAD</td><td colspan="3"><input id="localidad"></td></tr>
+<tr><td class="lb">DOMICILIO</td><td colspan="4"><input id="domicilio"></td><td class="lb">LUGAR</td><td colspan="2"><select id="lugar"><option>SENDA</option><option>DOMICILIO</option></select></td></tr>
+<tr><td class="lb">MED SOL</td><td colspan="2"><input id="med_solicitante" value="DIAZ BASANTA"></td><td class="lb">DIAGNOSTICO</td><td colspan="4"><input id="diagnostico"></td></tr>
+<tr><td class="lb">MEDICACION</td><td colspan="4"><input id="medicacion"></td><td class="lb">TECNICO</td><td colspan="2"><select id="tecnico"><option>SEBASTIAN</option><option>MARIEL</option></select></td></tr>
+<tr><td class="lb">OBS</td><td colspan="7"><input id="observacion"></td></tr>
+</table>
+</div>
+<div id="tab_tec" class="tab">
+<table>
+<tr><td class="lb">COLABORACION</td><td><select id="colaboracion"><option>BUENA</option><option>REGULAR</option><option>MALA</option><option>NO COLABORA</option></select></td><td class="lb">MONTAJE</td><td><input id="montaje" value="PROTOCOLO 3"></td><td class="lb">PORCIONES</td><td><input id="porciones" placeholder="22hs"></td><td class="lb">NOCHE</td><td><input id="noche" placeholder="LUNES NOCHE"></td></tr>
+<tr><td colspan="8" style="background:#0f172a;color:#ffd166;text-align:center;font-weight:bold">OTROS - SI NO - POR SAHOS</td></tr>
+<tr><td>URGENTE <input id="chk_urgente" type="checkbox"></td><td>EKG <input id="chk_ekg" type="checkbox"></td><td>F.A. <input id="chk_fa" type="checkbox"></td><td>OXIMETRIA <input id="chk_oximetria" type="checkbox" checked></td><td>EMG <input id="chk_emg" type="checkbox"></td><td>EOG <input id="chk_eog" type="checkbox"></td><td>TORAX <input id="chk_torax" type="checkbox" checked></td><td>ABDOMEN <input id="chk_abdomen" type="checkbox" checked></td></tr>
+<tr><td>RONQUIDOS <input id="chk_ronquidos" type="checkbox" checked></td><td>HIPERNEA <input id="chk_hipernea" type="checkbox" checked></td><td>PESO <input id="chk_peso" type="checkbox"></td><td>TALLA <input id="chk_talla" type="checkbox"></td><td>FOTO <input id="chk_foto" type="checkbox"></td><td>MAIL <input id="chk_mail" type="checkbox" checked></td><td>INFORMA <input id="informa" value="FITO" style="width:60px"></td><td></td></tr>
+<tr><td colspan="8" style="background:#1e3a8a;color:#93c5fd;font-weight:bold">NIÑOS</td></tr>
+<tr><td class="lb">EDAD GEST</td><td><input id="edad_gestacional"></td><td class="lb">PARTO?</td><td><input id="parto"></td><td class="lb">PESO NACER</td><td><input id="peso_nacer"></td><td class="lb">TALLA NACER</td><td><input id="talla_nacer"></td></tr>
+<tr><td class="lb">OXIGENO</td><td><input id="oxigeno"></td><td class="lb">PESO ACT</td><td><input id="peso_actual"></td><td class="lb">TALLA ACT</td><td><input id="talla_actual"></td><td colspan="2"></td></tr>
+</table>
+</div>
+<div id="tab_plata" class="tab">
+<div style="background:#dc2626;color:#fff;padding:5px;border-radius:6px;text-align:center;font-weight:bold;margin-bottom:6px">SOLO VISIBLE ADMIN - sbproducciones@gmail.com</div>
+<table>
+<tr><td class="lb">TOTAL</td><td><input id="plata_total" type="number"></td><td class="lb">EFECTIVO</td><td><input id="plata_efectivo" type="number"></td><td class="lb">DIFERENCIAL</td><td><input id="plata_diferencial" type="number"></td></tr>
+<tr><td class="lb">TIPO COBRO</td><td><select id="tipo_cobro"><option>EFECTIVO ADELANTO</option><option>TRANSFERENCIA</option><option>OS</option><option>DOMICILIO MIO</option></select></td><td class="lb">MARIEL</td><td><input id="plata_mariel" type="number"></td><td class="lb">SEBA</td><td><input id="plata_seba" type="number"></td></tr>
+<tr><td class="lb">DIAZ</td><td><input id="plata_diaz" type="number"></td><td class="lb">SALDO</td><td><input id="plata_saldo"></td><td class="lb">NOTA</td><td><input id="nota_plata" placeholder="me quedo con efectivo"></td></tr>
+</table>
+</div>
+<div id="tab_est" class="tab">
+<table>
+<tr><td class="lb">ESTADO</td><td><select id="estado"><option>NUEVO</option><option>FALTA_PAPELES</option><option>A_INFORMAR</option><option>INFORMADO</option><option>FINALIZADO</option></select></td><td class="lb">FALTA</td><td><select id="falta_papeles"><option>OK</option><option>FALTA AUTORIZACION</option><option>FALTA FIRMA</option><option>AFILIADO NO DISP</option></select></td><td class="lb">N° ATI</td><td><input id="nro_ati"></td></tr>
+<tr><td class="lb">LINK ATI</td><td colspan="3"><input id="link_ati"></td><td colspan="2"><button onclick="window.open(document.getElementById('link_ati').value,'_blank')" style="width:100%;background:#3b82f6;color:#fff;border:none;padding:4px;border-radius:4px">ABRIR ATI</button></td></tr>
+<tr><td class="lb">INFORME URL</td><td colspan="5"><input id="informe_url"></td></tr>
+</table>
+<button class="sv" style="background:#25D366" onclick="guardar()">💾 GUARDAR Y CAMBIAR ESTADO</button>
+</div>
+<button class="sv" onclick="guardar()">💾 GUARDAR FICHA COMPLETA</button>
+<div style="text-align:center;margin-top:6px"><a href="admin_auto.html" style="color:#00f5d4;font-size:0.75rem">← Admin Auto</a> | <a href="lista_mensual.html" style="color:#ffd166;font-size:0.75rem">Lista Mensual →</a></div>
+</div></body></html>
