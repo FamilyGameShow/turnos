@@ -1,55 +1,34 @@
-<!DOCTYPE html><html lang="es" class="notranslate" translate="no"><head><meta charset="UTF-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SENDA Turno PSG</title>
+<!DOCTYPE html><html lang="es" class="notranslate" translate="no"><head><meta charset="UTF-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>SENDA Turno</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg);const db=getFirestore(app);
 
-window.checkOS=()=>{let v=document.getElementById('os').value;document.getElementById('os_otra').style.display=v=='OTRA'?'block':'none';}
-window.validarDia=()=>{let f=document.getElementById('fecha').value;if(!f)return;let d=new Date(f+'T12:00:00');let dia=d.getDay();let nombre=['DOMINGO','LUNES','MARTES','MIERCOLES','JUEVES','VIERNES','SABADO'][dia];let txt=document.getElementById('avisoDia');if(dia!==1&&dia!==2&&dia!==4){txt.innerHTML='<b style="color:#ef4444">❌ NO atendemos '+nombre+'. Solo LUNES, MARTES y JUEVES noche. No hay Viernes.</b>';document.getElementById('btn').disabled=true;document.getElementById('btn').style.opacity='0.3';}else{let nocheTxt=dia==1?'NOCHE DEL LUNES':dia==2?'NOCHE DEL MARTES':'NOCHE DEL JUEVES';txt.innerHTML='<b style="color:#10b981">✅ '+nocheTxt+' '+f+' - Disponible para pre-reserva</b>';document.getElementById('btn').disabled=false;document.getElementById('btn').style.opacity='1';}}
-
+window.checkOS=()=>{document.getElementById('os_otra').style.display=document.getElementById('os').value=='OTRA'?'block':'none';}
+window.cambiarHoras=()=>{
+ let tipo=document.getElementById('tipo').value;let sel=document.getElementById('hora');sel.innerHTML='';
+ if(tipo=='EEG'){sel.innerHTML+='<option value="21:00">21:00 a 22:00 - EEG (1h)</option><option value="22:00" selected>22:00 a 23:00 - EEG (1h)</option>';document.getElementById('infoHora').innerText='EEG: bloque de 1 hora';}
+ else if(tipo=='PSG_BASAL'){sel.innerHTML+='<option value="21:00">21:00 a 22:00</option><option value="23:00">23:00 a 00:00</option><option value="01:00">01:00 a 02:00 (madrugada)</option><option value="03:00">03:00 a 04:00 (madrugada)</option>';document.getElementById('infoHora').innerText='PSG sin apneas: bloques de 1h - 01:00 y 03:00 son misma noche Lun/Mar/Jue';}
+ else if(tipo=='PSG_RESP'){sel.innerHTML+='<option value="23:00" selected>23:00 a 05:00 - 6 horas (Apneas / Trast. Sueño / Parasomnias)</option>';document.getElementById('infoHora').innerText='PSG Respiratorio: 6 horas de estudio, inicia 23:00';}
+}
+window.validarDia=()=>{let f=document.getElementById('fecha').value;if(!f)return;let d=new Date(f+'T12:00:00');let dia=d.getDay();let txt=document.getElementById('avisoDia');if(dia!==1&&dia!==2&&dia!==4){txt.innerHTML='<b style="color:#ef4444">❌ Solo LUNES, MARTES y JUEVES noche</b>';document.getElementById('btn').disabled=true;document.getElementById('btn').style.opacity='0.3';}else{txt.innerHTML='<b style="color:#10b981">✅ '+(dia==1?'NOCHE DEL LUNES':dia==2?'NOCHE DEL MARTES':'NOCHE DEL JUEVES')+' disponible</b>';document.getElementById('btn').disabled=false;document.getElementById('btn').style.opacity='1';}}
 window.enviar=async()=>{
- let fecha=document.getElementById('fecha').value;if(!fecha){alert('Elegí fecha');return;}
- let d=new Date(fecha+'T12:00:00');let dia=d.getDay();if(dia!==1&&dia!==2&&dia!==4){alert('Solo LUNES, MARTES y JUEVES noche');return;}
- let os=document.getElementById('os').value;if(os=='OTRA'){os=document.getElementById('os_otra').value.toUpperCase()||'OTRA';}
- if(os==''){os='PARTICULAR';}
- let snap=await getDocs(collection(db,"pacientes_senda"));let ocupado=false;snap.forEach(x=>{if(x.data().fecha===fecha)ocupado=true;});if(ocupado){alert('Esa noche ya está ocupada, elegí otra Lun/Mar/Jue');return;}
- let data={pre_codigo:'PRE-'+Date.now().toString().slice(-5),apellidos:document.getElementById('apellidos').value.trim().toUpperCase(),nombres:document.getElementById('nombres').value.trim().toUpperCase(),dni:document.getElementById('dni').value.trim(),obra_social:os.toUpperCase(),telefono:document.getElementById('tel').value.trim(),fecha:fecha,hora:document.getElementById('hora').value,noche:dia==1?'NOCHE DEL LUNES':dia==2?'NOCHE DEL MARTES':'NOCHE DEL JUEVES',lugar:'SENDA',tipo_estudio:'PSG NOCTURNO',estado:'PRE-RESERVA',creado:new Date().toISOString()};
- if(!data.apellidos||!data.nombres||!data.dni){alert('Completá apellido, nombre y DNI');return;}
+ let fecha=document.getElementById('fecha').value;let d=new Date(fecha+'T12:00:00');if(d.getDay()!==1&&d.getDay()!==2&&d.getDay()!==4){alert('Solo Lun Mar Jue');return;}
+ let os=document.getElementById('os').value;if(os=='OTRA')os=document.getElementById('os_otra').value||'OTRA';
+ let snap=await getDocs(collection(db,"pacientes_senda"));let ocup=false;snap.forEach(x=>{if(x.data().fecha===fecha)ocup=true});if(ocup){alert('Noche ocupada');return;}
+ let data={pre_codigo:'PRE-'+Date.now().toString().slice(-5),apellidos:document.getElementById('apellidos').value.toUpperCase(),nombres:document.getElementById('nombres').value.toUpperCase(),dni:document.getElementById('dni').value,obra_social:os.toUpperCase(),telefono:document.getElementById('tel').value,tipo_estudio:document.getElementById('tipo').value,fecha:fecha,hora:document.getElementById('hora').value,noche:d.getDay()==1?'NOCHE DEL LUNES':d.getDay()==2?'NOCHE DEL MARTES':'NOCHE DEL JUEVES',estado:'PRE-RESERVA',creado:new Date().toISOString()};
  await addDoc(collection(db,"pacientes_senda"),data);
- document.getElementById('form').innerHTML='<div style="background:#10b981;color:#000;padding:20px;border-radius:10px;text-align:center"><h2>✅ Pre-reserva recibida</h2><p><b>'+data.noche+'<br>'+data.fecha+' '+data.hora+'hs</b><br><span style="font-size:0.75rem">Bloque de 1 hora - Aclaración: si dice LUNES 03hs es lunes de noche, madrugada del martes</span></p><p style="background:#fff;padding:8px;border-radius:6px;margin:10px 0">Obra Social: <b>'+data.obra_social+'</b><br><span style="font-size:0.7rem">Queda pendiente confirmar si cubre. Te avisamos por WhatsApp.</span></p><p style="font-size:0.75rem;color:#333">No es el N° definitivo de Ati. El N° de estudio se asigna cuando confirmamos el turno.</p><p style="font-size:0.65rem;color:#444;margin-top:8px">Código interno: '+data.pre_codigo+'</p></div>';
+ document.getElementById('form').innerHTML='<div style="background:#10b981;color:#000;padding:20px;border-radius:10px;text-align:center"><h2>✅ Pre-reserva</h2><p><b>'+data.tipo_estudio+'<br>'+data.noche+' '+data.fecha+' '+data.hora+'</b></p><p style="font-size:0.75rem">Pendiente confirmar cobertura de '+data.obra_social+'. Te escribimos por WhatsApp. No es N° de Ati definitivo.</p></div>';
 };
-</script>
-<style>body{background:#0f172a;color:#fff;font-family:sans-serif;padding:12px;margin:0}.box{max-width:520px;margin:0 auto;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px}h2{color:#00f5d4;text-align:center;margin:0 0 8px 0;font-size:1.1rem}.aviso{background:#0f172a;border:1px dashed #00f5d4;padding:8px;border-radius:8px;font-size:0.72rem;color:#94a3b8;margin-bottom:10px}label{font-size:0.7rem;color:#ffd166;display:block;margin-top:10px}input,select{width:100%;padding:11px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;margin-top:4px;font-size:0.9rem}button{width:100%;padding:13px;background:#00f5d4;color:#000;font-weight:bold;border:none;border-radius:8px;margin-top:14px;font-size:1rem;cursor:pointer}</style>
-</head><body><div class="box">
-<h2 class="notranslate">🌙 SENDA COMUNIDAD<br>Turno Polisomnografía Nocturna</h2>
-<div class="aviso"><b>Solo NOCHE de LUNES, MARTES y JUEVES. No hay Viernes.</b><br>• Lunes 03:00 = Lunes de noche, madrugada del martes.<br>• Bloques de 1 hora.</div>
+window.onload=()=>cambiarHoras();
+</script><style>body{background:#0f172a;color:#fff;font-family:sans-serif;padding:12px}.box{max-width:540px;margin:auto;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px}label{font-size:0.7rem;color:#ffd166;display:block;margin-top:10px}input,select{width:100%;padding:11px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;margin-top:4px}button{width:100%;padding:13px;background:#00f5d4;color:#000;font-weight:bold;border:none;border-radius:8px;margin-top:14px}#infoHora{font-size:0.7rem;color:#94a3b8;margin-top:4px}</style></head><body><div class="box"><h2 class="notranslate" style="color:#00f5d4;text-align:center">🌙 SENDA - Turno PSG</h2>
 <div id="form">
-<label>Apellidos</label><input id="apellidos" autocomplete="off" placeholder="PEREZ">
-<label>Nombres</label><input id="nombres" placeholder="JUAN">
-<label>DNI</label><input id="dni" inputmode="numeric" placeholder="30123456">
-<label>Obra Social - Elegí de la lista</label>
-<select id="os" onchange="checkOS()">
-<option value="PARTICULAR">PARTICULAR</option>
-<option value="OSDE">OSDE</option>
-<option value="SWISS MEDICAL">SWISS MEDICAL</option>
-<option value="GALENO">GALENO</option>
-<option value="MEDICUS">MEDICUS</option>
-<option value="OMINT">OMINT</option>
-<option value="IOMA">IOMA</option>
-<option value="PAMI">PAMI</option>
-<option value="OSPRERA">OSPRERA</option>
-<option value="OSPE">OSPE</option>
-<option value="OSDEPYM">OSDEPYM</option>
-<option value="UNION PERSONAL">UNION PERSONAL</option>
-<option value="OTRA">OTRA - Escribir cual</option>
-</select>
-<input id="os_otra" placeholder="Escribí tu obra social acá" style="display:none">
-<label>WhatsApp / Tel</label><input id="tel" placeholder="11 2345 6789">
-<label>Fecha - Solo Lun Mar Jue noche</label><input type="date" id="fecha" onchange="validarDia()">
-<div id="avisoDia" style="font-size:0.8rem;margin-top:6px;min-height:18px;color:#e2e8f0"></div>
-<label>Horario - Bloque de 1 hora</label>
-<select id="hora"><option value="21:00">21:00 a 22:00</option><option value="22:00" selected>22:00 a 23:00 - Recomendado</option><option value="23:00">23:00 a 00:00</option></select>
+<label>Apellidos</label><input id="apellidos"><label>Nombres</label><input id="nombres"><label>DNI</label><input id="dni">
+<label>Obra Social</label><select id="os" onchange="checkOS()"><option>PARTICULAR</option><option>OSDE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>IOMA</option><option>PAMI</option><option>OTRA</option></select><input id="os_otra" style="display:none" placeholder="Escribí obra social">
+<label>WhatsApp</label><input id="tel">
+<label>¿Qué estudio te pidieron?</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG (electroencefalograma) - 1 hora</option><option value="PSG_BASAL">PSG sin apneas / PSG basal</option><option value="PSG_RESP" selected>PSG Respiratorio / Apneas / Trast. Sueño / Parasomnias - 6 horas</option></select>
+<label>Fecha - Solo Lun Mar Jue noche</label><input type="date" id="fecha" onchange="validarDia()"><div id="avisoDia" style="min-height:18px;font-size:0.8rem"></div>
+<label>Horario disponible</label><select id="hora"></select><div id="infoHora"></div>
 <button id="btn" onclick="enviar()" class="notranslate">Reservar Noche</button>
-<p style="font-size:0.65rem;color:#64748b;text-align:center;margin-top:8px">La reserva es pre-reserva. Confirmamos cobertura por WhatsApp.</p>
 </div></div></body></html>
