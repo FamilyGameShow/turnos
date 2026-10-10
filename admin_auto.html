@@ -167,10 +167,30 @@ window.addEventListener('message', async(e)=>{
 
 window.confirmar=async(id)=>{
  let p=pacientes.find(x=>x.id==id);
+ let info={
+  'IOMA':'IOMA $15.000 dif - NO requiere autoriz si es 1ra del año',
+  'OSDE':'OSDE lo autorizamos nosotros token - sin dif',
+  'OSPE':'OSPE lo autoriza paciente web OSPE',
+  'OSPE PMO':'OSPE PMO autoriza Inst Central Medicina',
+  'SWISS MEDICAL':'Swiss no requiere autoriz',
+  'GALENO':'Galeno autoriza afiliado',
+  'MEDICUS':'Medicus no requiere autoriz',
+  'OMINT':'Omint no requiere autoriz',
+  'PARTICULAR': p.tipo_estudio=='EEG'?'Part $100.000':p.tipo_estudio=='PSG_BASAL'?'Part $150.000':p.tipo_estudio=='PSG_NOCTURNA'?'Part $200.000':'Part $350.000'
+ }[p.obra_social] || '';
+
+ // 1. GENERAR PDF TURNO IGUAL AL PAPELITO
+ let diaNum=(p.fecha||'').split('-')[2]+'/'+(p.fecha||'').split('-')[1];
+ let w=window.open('','','width=800,height=900');
+ w.document.write('<html><head><meta charset="UTF-8"><title>TURNO '+p.apellidos+'</title></head><body style="margin:0;background:#2ecc71;padding:10px;font-family:Arial"><div style="max-width:700px;margin:auto;background:white;border:3px solid black"><div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:2px solid black"><div style="font-weight:900">SENDA COMUNIDAD</div><div style="font-weight:900;font-size:22px">TURNO</div></div><div style="border:3px solid black;margin:8px;padding:8px;font-size:20px;font-weight:700">DIA: '+p.noche+' '+diaNum+' - '+p.tipo_estudio+'</div><div style="border:3px solid black;margin:8px;padding:8px;font-size:20px;font-weight:700;text-align:center">HORA: '+p.hora+' - '+p.apellidos+' '+p.nombres+'</div><div style="border:3px solid black;margin:8px;padding:8px;font-size:16px">LUGAR: 56 N°1321 e/21 y 22<br>'+p.obra_social+' - '+info+'<br>DNI '+p.dni+' TEL '+p.telefono+'</div><div style="border:2px solid red;margin:8px;padding:8px;text-align:center;font-size:13px">Pelo lavado seco sin crema - sin esmalte - privacion sueño - orden autorizada (IOMA no requiere si es 1ra)<br>INFORME 10-15 DIAS PDF - TEL 2215983871</div></div><div style="text-align:center;margin-top:10px"><button onclick="window.print()" style="padding:14px 28px;background:#000;color:#fff">IMPRIMIR / GUARDAR PDF</button></div></body></html>');
+
+ // 2. WA
  await updateDoc(doc(db,"pacientes_senda",id),{estado:'CONFIRMADO', papeles:{...(p.papeles||{}), confirmado:true}});
- let msg=`Hola ${p.nombres}! Tu turno SENDA CONFIRMADO ${p.fecha} ${p.hora} 56 N°1321 e/21 y22. ${p.tipo_estudio}. Pelo lavado seco sin crema, sin esmalte, privación sueño, orden autorizada (IOMA $15000 no necesita). Informe 15d PDF. 2215983871`;
- let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
- window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank'); cargar();
+ let msg=`Hola ${p.nombres}! ✅ Tu turno SENDA CONFIRMADO:\n\n📅 ${p.noche} ${diaNum} ${p.hora}\n📍 56 N°1321 e/21 y 22 La Plata\n🧠 ${p.tipo_estudio}\n🏥 ${p.obra_social} - ${info}\n\nIndicaciones:\n- Pelo lavado, seco, sin crema\n- Sin esmalte uñas\n- Privación sueño\n- ${p.obra_social=='IOMA'?'IOMA NO requiere autoriz si es 1ra del año':''}\n\nInforme 10-15 dias PDF.\nTEL 2215983871\n\nTe adjunto comprobante PDF abajo 👇\nID ${id}`;
+ let tel=(p.telefono||'').replace(/\\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
+ setTimeout(()=>{ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank'); }, 800);
+ cargar();
+}
 }
 window.cancelar=async(id)=>{ if(!confirm('Cancelar?'))return; await updateDoc(doc(db,"pacientes_senda",id),{estado:'CANCELADO'}); cargar(); }
 
