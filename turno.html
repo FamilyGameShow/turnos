@@ -10,75 +10,74 @@ import { getFirestore, collection, addDoc } from "https://www.gstatic.com/fireba
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app); const storage=getStorage(app);
-
 window.cambiarHoras=()=>{
  let t=document.getElementById('tipo').value; let sel=document.getElementById('hora'); sel.innerHTML='';
  if(t=='EEG'){ sel.innerHTML='<option value="21:00-22:00">21:00 a 22:00</option><option value="22:00-23:00" selected>22:00 a 23:00</option>'; }
  else if(t=='PSG_BASAL'){ sel.innerHTML='<option value="21:00-23:00">21:00 a 23:00</option><option value="23:00-01:00">23:00 a 01:00</option><option value="01:00-03:00">01:00 a 03:00</option><option value="03:00-05:00">03:00 a 05:00</option>'; }
- else { sel.innerHTML='<option value="23:00-05:00" selected>23:00 a 05:00 (6hs) - Completo</option><option value="21:00-23:00">21:00 a 23:00</option>'; }
+ else { sel.innerHTML='<option value="23:00-05:00" selected>23:00 a 05:00 (6hs)</option><option value="21:00-23:00">21:00 a 23:00</option>'; }
 }
-
 window.validarDia=()=>{
  let f=document.getElementById('fecha').value; if(!f) return;
  let dia=new Date(f+'T12:00:00').getDay(); let btn=document.getElementById('btn'); let aviso=document.getElementById('aviso');
- if(dia!==1&&dia!==2&&dia!==4){ aviso.innerHTML='❌ Solo atendemos LUNES, MARTES y JUEVES noche'; btn.disabled=true; btn.style.opacity='0.3'; }
- else{ aviso.innerHTML='✅ '+(dia==1?'LUNES NOCHE':dia==2?'MARTES NOCHE':'JUEVES NOCHE')+' - Disponible'; btn.disabled=false; btn.style.opacity='1'; }
+ if(dia!==1&&dia!==2&&dia!==4){ aviso.innerHTML='❌ Solo LUN MAR JUE'; btn.disabled=true; btn.style.opacity='0.3'; }
+ else{ aviso.innerHTML='✅ '+(dia==1?'LUNES NOCHE':dia==2?'MARTES NOCHE':'JUEVES NOCHE'); btn.disabled=false; btn.style.opacity='1'; }
 }
-
 window.enviar=async()=>{
  let ap=document.getElementById('ap').value.toUpperCase().trim(); let no=document.getElementById('no').value.toUpperCase().trim();
  let dni=document.getElementById('dni').value.trim(); let tel=document.getElementById('tel').value.trim();
  let os=document.getElementById('os').value; let fecha=document.getElementById('fecha').value;
  let hora=document.getElementById('hora').value; let tipo=document.getElementById('tipo').value;
  let file=document.getElementById('ordenFile').files[0];
- if(!ap||!no||!dni||!fecha||!tel){ alert('Completá apellido, nombre, DNI, tel y fecha'); return; }
- if(!file){ alert('Tenés que subir la foto de la orden médica'); return; }
+ if(!ap||!no||!dni||!fecha||!tel){ alert('Falta dato'); return; }
+ if(!file){ alert('Subí la foto de la orden'); return; }
  let d=new Date(fecha+'T12:00:00'); if(d.getDay()!==1&&d.getDay()!==2&&d.getDay()!==4){ alert('Solo Lun Mar Jue'); return; }
-
- document.getElementById('btn').innerHTML='Subiendo orden...'; document.getElementById('btn').disabled=true;
+ document.getElementById('btn').innerHTML='Subiendo...'; document.getElementById('btn').disabled=true;
  try{
-  let ordenURL=""; let storageRef=ref(storage,'ordenes/'+Date.now()+'_'+file.name);
-  await uploadBytes(storageRef,file); ordenURL=await getDownloadURL(storageRef);
+  let storageRef=ref(storage,'ordenes/'+Date.now()+'_'+file.name); await uploadBytes(storageRef,file);
+  let ordenURL=await getDownloadURL(storageRef);
   let noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES';
   let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_url:ordenURL,tiene_orden:true,estado:'PRE-RESERVA',origen:'WEB',creado:new Date().toISOString()};
   let docRef=await addDoc(collection(db,"pacientes_senda"),data);
-
-  // PDF TURNO
-  let win=window.open('','','width=600,height=700');
-  win.document.write(`<html><head><meta charset="UTF-8"><title>Turno SENDA</title></head><body style="font-family:sans-serif;padding:20px">
-  <h2 style="text-align:center">SENDA - Pre-reserva registrada</h2>
-  <p><b>Paciente:</b> ${ap} ${no} - DNI ${dni}</p>
-  <p><b>Fecha:</b> ${noche} ${fecha} - ${hora} hs</p>
-  <p><b>Estudio:</b> ${tipo} - Obra Social: ${os}</p>
-  <p><b>Lugar:</b> SENDA - La Plata</p>
-  <p style="background:#fef9c3;padding:10px;border-radius:8px"><b>Importante:</b> Traer orden original, DNI, y venir con pelo lavado sin crema. Te confirmamos por WhatsApp en el día.</p>
-  <p><b>Orden:</b> <a href="${ordenURL}" target="_blank">Ver orden subida</a></p>
-  <hr><p style="font-size:0.8rem">ID Turno: ${docRef.id}<br>Si necesitás modificar o cancelar: avisá por WhatsApp con este ID</p>
-  <button onclick="window.print()" style="width:100%;padding:12px;background:#00f5d4;border:none;border-radius:8px;font-weight:bold">Imprimir / Guardar PDF</button>
-  </body></html>`);
-  alert('Pre-reserva enviada! Te va a aparecer el comprobante para imprimir.');
+  let win=window.open('','','width=600,height=750');
+  win.document.write(`<html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;padding:20px;background:#0f172a;color:#fff">
+  <div style="max-width:500px;margin:auto;background:#1e293b;padding:20px;border-radius:16px;border:1px solid #00f5d4">
+  <h2 style="color:#00f5d4;text-align:center">SENDA - Pre-reserva OK</h2>
+  <p><b style="color:#ffd166">Paciente:</b> ${ap} ${no}</p>
+  <p><b style="color:#ffd166">Fecha:</b> ${noche} ${fecha} ${hora}</p>
+  <p><b style="color:#ffd166">Estudio:</b> ${tipo} - ${os}</p>
+  <p style="background:#0f172a;padding:10px;border-radius:8px;border:1px solid #334155">Traer DNI, orden original, pelo lavado sin crema. Lugar: SENDA La Plata.</p>
+  <p><a href="${ordenURL}" target="_blank" style="color:#00f5d4">Ver orden subida</a></p>
+  <p style="font-size:0.7rem;color:#94a3b8">ID: ${docRef.id}</p>
+  <button onclick="window.print()" style="width:100%;padding:12px;background:#00f5d4;color:#000;font-weight:bold;border:none;border-radius:8px">Imprimir PDF</button>
+  </div></body></html>`);
   document.getElementById('btn').innerHTML='Solicitar Pre-reserva'; document.getElementById('btn').disabled=false;
- }catch(e){ alert('Error: '+e.message); document.getElementById('btn').innerHTML='Solicitar Pre-reserva'; document.getElementById('btn').disabled=false; }
+ }catch(e){ alert(e.message); document.getElementById('btn').innerHTML='Solicitar Pre-reserva'; document.getElementById('btn').disabled=false; }
 }
 window.onload=()=>{cambiarHoras();};
 </script>
-<style>body{background:#f8fafc;font-family:sans-serif;padding:12px}.box{max-width:550px;margin:auto;background:#fff;padding:18px;border-radius:16px;box-shadow:0 4px 20px #0001}input,select{width:100%;padding:11px;margin-top:4px;border-radius:10px;border:1px solid #cbd5e1}label{font-size:0.75rem;font-weight:bold;color:#334155;margin-top:10px;display:block}button{width:100%;padding:14px;background:#0f172a;color:#00f5d4;font-weight:bold;border:none;border-radius:10px;margin-top:14px;font-size:1rem}h2{color:#0f172a;text-align:center}#aviso{min-height:18px;font-size:0.85rem;margin-top:4px}</style>
+<style>
+body{background:#0f172a;color:#fff;font-family:sans-serif;padding:12px}
+.box{max-width:580px;margin:auto;background:#1e293b;padding:20px;border-radius:20px;border:1px solid #334155;box-shadow:0 0 30px #00f5d422}
+input,select{width:100%;padding:12px;margin-top:4px;border-radius:10px;background:#0f172a;border:1px solid #334155;color:#fff}
+label{font-size:0.75rem;color:#ffd166;margin-top:10px;display:block;letter-spacing:0.5px}
+button{background:#00f5d4;color:#000;font-weight:800}
+#aviso{color:#00f5d4;font-weight:bold}
+h2{color:#00f5d4}
+</style>
 </head>
 <body>
 <div class="box">
-<h2>Solicitar Turno - SENDA</h2><p style="text-align:center;font-size:0.8rem;color:#64748b">Solo Lunes, Martes y Jueves noche</p>
-<label>Apellidos</label><input id="ap" placeholder="PEREZ">
-<label>Nombres</label><input id="no" placeholder="JUAN">
-<label>DNI</label><input id="dni" placeholder="12345678">
-<label>WhatsApp</label><input id="tel" placeholder="221...">
+<h2>SENDA - Solicitar Turno</h2><p style="text-align:center;color:#94a3b8;font-size:0.8rem">Solo Lunes, Martes y Jueves noche</p>
+<label>Apellidos</label><input id="ap">
+<label>Nombres</label><input id="no">
+<label>DNI</label><input id="dni">
+<label>WhatsApp</label><input id="tel">
 <label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>OSDE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>IOMA</option><option>PAMI</option><option>OTRA</option></select>
-<label>Foto de la Orden / Pedido médico *</label><input type="file" id="ordenFile" accept="image/*,.pdf" capture="environment">
-<div style="font-size:0.7rem;color:#64748b">Sacá foto clara de la orden donde se vea el pedido de Polisomnografía / EEG</div>
-<label>Tipo de estudio</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG 21-22 / 22-23</option><option value="PSG_BASAL">PSG Basal 21-23 / 23-01 / 01-03 / 03-05</option><option value="PSG_RESP" selected>PSG Respiratoria 23-05 (6hs) - Completa</option></select>
-<label>Fecha (solo Lun Mar Jue)</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso"></div>
+<label>Foto de la Orden *</label><input type="file" id="ordenFile" accept="image/*,.pdf" capture="environment">
+<label>Tipo</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG 21-22 / 22-23</option><option value="PSG_BASAL">PSG Basal 21-23 / 23-01 / 01-03 / 03-05</option><option value="PSG_RESP" selected>PSG Resp 23-05 (6hs)</option></select>
+<label>Fecha</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso"></div>
 <label>Bloque horario</label><select id="hora"></select>
-<button id="btn" onclick="enviar()">Solicitar Pre-reserva</button>
-<p style="font-size:0.7rem;color:#94a3b8;text-align:center;margin-top:10px">Al enviar, te generamos el comprobante en PDF para que lo guardes. Podés modificar o cancelar avisando por WhatsApp con el ID.</p>
+<button id="btn" onclick="enviar()" style="width:100%;padding:14px;border-radius:12px;margin-top:14px">Solicitar Pre-reserva</button>
 </div>
 </body>
 </html>
