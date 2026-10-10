@@ -2,63 +2,82 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENDA - Turno v10</title>
+<title>SENDA Turno v14</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
+
+const OS_INFO={
+ 'IOMA':{txt:'IOMA: NO requiere autorización si es la 1ra del año. Diferenciado $15.000 a pagar el día del estudio. Traer carnet + DNI.', costo:'$15.000'},
+ 'OSDE':{txt:'OSDE: La autorización la hacemos nosotros con token. SIN diferenciado. Traer carnet + DNI + orden.', costo:'$0'},
+ 'OSPE':{txt:'OSPE: La autoriza el PACIENTE por la web de OSPE. SIN diferenciado. Traer autorización impresa.', costo:'$0'},
+ 'OSPE PMO':{txt:'OSPE PMO: Se autoriza en Instituto Central de Medicina. SIN diferenciado.', costo:'$0'},
+ 'SWISS MEDICAL':{txt:'SWISS MEDICAL: NO requiere autorización. SIN diferenciado.', costo:'$0'},
+ 'GALENO':{txt:'GALENO: Autoriza el AFILIADO. Sin costo.', costo:'$0'},
+ 'MEDICUS':{txt:'MEDICUS: NO requiere autorización. Sin diferenciado.', costo:'$0'},
+ 'OMINT':{txt:'OMINT: NO requiere autorización. Sin diferenciado.', costo:'$0'},
+ 'PAMI':{txt:'PAMI: NO TRABAJAMOS CON PAMI. Consultar como PARTICULAR.', costo:'NO'},
+ 'PARTICULAR':{txt:'PARTICULAR: Pago total el día del estudio. EEG $100.000 - PSG BASAL/DIURNA $150.000 - PSG NOCT $200.000 - PSG RESP $350.000', costo:'Ver lista'},
+ 'OTRA':{txt:'OTRA OS: Consultar autorización. Traer orden + carnet.', costo:'A confirmar'}
+};
+
 let ordenB64="";
-window.toggleOrden=()=>{ document.getElementById('boxOrden').style.display=document.getElementById('tieneOrden').value=='SI'?'block':'none'; }
-window.leerOrden=(i)=>{ let f=i.files[0]; if(!f)return; if(f.size>2500000){alert('Muy pesada');return;} let r=new FileReader(); r.onload=e=>{ordenB64=e.target.result; document.getElementById('avisoOrden').innerHTML='✅ Cargada'}; r.readAsDataURL(f); }
+window.toggleOrden=()=>{document.getElementById('boxOrden').style.display=document.getElementById('tieneOrden').value=='SI'?'block':'none';}
+window.mostrarOS=()=>{
+ let os=document.getElementById('os').value;
+ let info=OS_INFO[os]||OS_INFO['OTRA'];
+ document.getElementById('infoOS').innerHTML=`<div style="background:#fff3cd;border:2px solid #f59e0b;padding:10px;border-radius:10px;color:#000;font-size:0.85rem"><b>${info.txt}</b><br><b style="font-size:1.1rem">Costo: ${info.costo}</b></div>`;
+ // particular precios dinámicos según tipo
+ if(os=='PARTICULAR'){
+  let tipo=document.getElementById('tipo').value;
+  let precio=tipo=='EEG'?'$100.000':(tipo=='PSG_BASAL'||tipo=='PSG_DIURNA')?'$150.000':tipo=='PSG_NOCTURNA'?'$200.000':'$350.000';
+  document.getElementById('infoOS').innerHTML+=`<div style="background:#000;color:#00f5d4;padding:8px;border-radius:8px;margin-top:6px;font-weight:900">ESTE ESTUDIO PARTICULAR: ${precio}</div>`;
+ }
+}
+window.leerOrden=(i)=>{let f=i.files[0];if(!f)return;let r=new FileReader();r.onload=e=>{ordenB64=e.target.result;document.getElementById('avisoOrden').innerHTML='✅ Cargada'};r.readAsDataURL(f);}
 const BLOQUES={'21:00-22:00':[21,22],'22:00-23:00':[22,23],'21:00-23:00':[21,23],'23:00-01:00':[23,25],'01:00-03:00':[25,27],'03:00-05:00':[27,29],'23:00-05:00':[23,29]};
-function choque(n, exs){ let [ns,ne]=BLOQUES[n]||[0,0]; for(let ex of exs){ if(ex.estado=='CANCELADO')continue; let [es,ee]=BLOQUES[ex.hora]||[0,0]; if(ns<ee&&es<ne)return ex;} return null; }
+function choque(n,exs){let a=BLOQUES[n]||[0,0];for(let ex of exs){if(ex.estado=='CANCELADO')continue;let b=BLOQUES[ex.hora]||[0,0];if(a[0]<b[1]&&b[0]<a[1])return ex;}return null;}
 window.cambiarHoras=async()=>{
  let t=document.getElementById('tipo').value, sel=document.getElementById('hora'), fecha=document.getElementById('fecha').value;
  let ops=t=='EEG'?['21:00-22:00','22:00-23:00']:t=='PSG_BASAL'?['21:00-23:00','23:00-01:00','01:00-03:00','03:00-05:00']:['23:00-05:00'];
- let ocup=[]; if(fecha){ try{ let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha)); let s=await getDocs(q); s.forEach(d=>ocup.push(d.data())); }catch(e){} }
- sel.innerHTML=''; for(let op of ops){ let ch=choque(op,ocup); let o=document.createElement('option'); o.value=op; o.text=ch?op+' ❌ OCUPADO':op; if(ch)o.disabled=true; sel.appendChild(o); }
+ let ocup=[]; if(fecha){try{let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha));let s=await getDocs(q);s.forEach(d=>ocup.push(d.data()));}catch(e){}}
+ sel.innerHTML=''; for(let op of ops){let ch=choque(op,ocup);let o=document.createElement('option');o.value=op;o.text=ch?op+' ❌ OCUPADO':op;if(ch)o.disabled=true;sel.appendChild(o);} mostrarOS();
 }
-window.validarDia=()=>{ let f=document.getElementById('fecha').value; if(!f)return; let dia=new Date(f+'T12:00:00').getDay(); let b=document.getElementById('btn'), av=document.getElementById('aviso'); if(dia!=1&&dia!=2&&dia!=4){av.innerHTML='❌ Solo LUN MAR JUE'; b.disabled=true;} else{av.innerHTML='✅ '+(dia==1?'LUNES':dia==2?'MARTES':'JUEVES')+' NOCHE'; b.disabled=false; cambiarHoras();} }
+window.validarDia=()=>{let f=document.getElementById('fecha').value;if(!f)return;let dia=new Date(f+'T12:00:00').getDay();let b=document.getElementById('btn'),av=document.getElementById('aviso');if(dia!=1&&dia!=2&&dia!=4){av.innerHTML='❌ Solo LUN MAR JUE';b.disabled=true;}else{av.innerHTML='✅ '+(dia==1?'LUNES':dia==2?'MARTES':'JUEVES');b.disabled=false;cambiarHoras();}}
 window.enviar=async()=>{
- let ap=document.getElementById('ap').value.toUpperCase().trim(), no=document.getElementById('no').value.toUpperCase().trim(), dni=document.getElementById('dni').value.trim(), tel=document.getElementById('tel').value.trim(), os=document.getElementById('os').value, fecha=document.getElementById('fecha').value, hora=document.getElementById('hora').value, tipo=document.getElementById('tipo').value, tiene=document.getElementById('tieneOrden').value;
+ let ap=document.getElementById('ap').value.toUpperCase().trim(),no=document.getElementById('no').value.toUpperCase().trim(),dni=document.getElementById('dni').value.trim(),tel=document.getElementById('tel').value.trim(),os=document.getElementById('os').value,fecha=document.getElementById('fecha').value,hora=document.getElementById('hora').value,tipo=document.getElementById('tipo').value,tiene=document.getElementById('tieneOrden').value;
  if(!ap||!no||!dni||!fecha||!tel){alert('Faltan datos');return;} if(tiene=='SI'&&!ordenB64){alert('Subí orden');return;}
  document.getElementById('btn').innerHTML='Verificando...'; document.getElementById('btn').disabled=true;
- let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha)); let snap=await getDocs(q); let exs=[]; snap.forEach(s=>exs.push(s.data())); let ch=choque(hora,exs);
- if(ch){ alert('❌ Ocupado por '+ch.apellidos); document.getElementById('btn').innerHTML='Solicitar'; document.getElementById('btn').disabled=false; cambiarHoras(); return; }
+ let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha));let snap=await getDocs(q);let exs=[];snap.forEach(s=>exs.push(s.data()));let ch=choque(hora,exs);
+ if(ch){alert('Ocupado por '+ch.apellidos);document.getElementById('btn').innerHTML='Solicitar';document.getElementById('btn').disabled=false;return;}
  try{
-  let d=new Date(fecha+'T12:00:00'), noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES', diaNum=fecha.split('-')[2]+'/'+fecha.split('-')[1];
-  let estado=tiene=='SI'?'PRE-RESERVA':'FALTA_ORDEN';
-  let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_base64:ordenB64,tiene_orden:tiene=='SI',estado:estado,origen:'WEB',creado:new Date().toISOString(),papeles:{orden_foto:!!ordenB64,orden_original:false,autorizacion:false,pago:false,confirmado:false}};
+  let d=new Date(fecha+'T12:00:00'),noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES',diaNum=fecha.split('-')[2]+'/'+fecha.split('-')[1];
+  let info=OS_INFO[os]||OS_INFO['OTRA'];
+  let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_base64:ordenB64,tiene_orden:tiene=='SI',estado:tiene=='SI'?'PRE-RESERVA':'FALTA_ORDEN',creado:new Date().toISOString(),papeles:{orden_foto:!!ordenB64,orden_original:false,autorizacion:false,pago:false,confirmado:false}};
   let docRef=await addDoc(collection(db,"pacientes_senda"),data);
-  // COMPROBANTE IGUAL A TU FOTO
-  let w=window.open('','','width=750,height=900');
-  w.document.write(`<html><head><meta charset="UTF-8"><title>TURNO SENDA</title><style>@media print{.no-print{display:none}}</style></head><body style="font-family:Arial,sans-serif;background:#00b050;padding:10px">
-  <div style="max-width:680px;margin:auto;background:#fff;border:4px solid #000">
-  <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:2px solid #000"><div style="display:flex;gap:8px;align-items:center"><div style="width:40px;height:40px;background:#ff6600;border-radius:50%"></div><div style="font-weight:900;line-height:1">SENDA<br>COMUNIDAD</div></div><div style="font-weight:900;font-size:22px">TURNO</div></div>
-  <div style="text-align:center;font-weight:700;padding:6px;border-bottom:2px solid #000">TURNO PARA ESTUDIO NEUROLOGICO</div>
-  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700"><u>DIA:</u> ${noche} <span style="background:#000;color:#fff;padding:0 6px">${diaNum}</span> &nbsp; ${noche.toLowerCase()} a la noche - ${tipo}</div>
-  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700;text-align:center"><u>HORA:</u> <span style="background:#000;color:#fff;padding:0 8px">${hora.split('-')[0]}hs</span> - Paciente: ${ap} ${no}</div>
-  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700">LUGAR: 56 N° 1321 e/ 21 y 22 - ${os} - DNI ${dni}</div>
-  <div style="text-align:center;font-size:13px;padding:4px">En caso de no poder concurrir avisar con anticipacion para cambiar el turno</div>
-  <div style="border:2px solid #f00;margin:8px;padding:8px;text-align:center;font-size:14px"><b>El dia del estudio:</b><br>- el pelo lavado, pero seco, sin crema de enjuague ni otros productos<br>- sin esmalte de uñas<br>- privación de sueño suficiente como para dormir en el consultorio<br><b>- orden autorizada por obra social (IOMA NO REQUIERE AUTORIZACION)</b><br>${tiene=='NO'?'<b style="color:red">- FALTA ORDEN: traerla el dia del estudio</b>':''}</div>
-  <div style="padding:8px;font-size:13px;font-weight:700">EL INFORME SERA ENVIADO DENTRO DE LOS 10 A 15 DIAS, EN FORMATO PDF,<br>POR FAVOR IMPRIMIRLO POR SI SE BORRA DE LOS MENSAJES.<br><div style="text-align:right;font-size:20px">TEL: 2215983871</div><div style="font-size:11px">ID: ${docRef.id} - ${estado}</div></div>
-  </div><div style="text-align:center;margin-top:10px" class="no-print"><button onclick="window.print()" style="padding:14px 30px;font-weight:900;background:#000;color:#fff;border:none;cursor:pointer">IMPRIMIR</button></div></body></html>`);
+  // PDF igual a tu foto + costos
+  let precioPart = os=='PARTICULAR'?(tipo=='EEG'?'$100.000':(tipo=='PSG_BASAL'||tipo=='PSG_DIURNA')?'$150.000':tipo=='PSG_NOCTURNA'?'$200.000':'$350.000'):info.costo;
+  let w=window.open('','','width=800,height=950');
+  w.document.write('<html><head><meta charset="UTF-8"><title>TURNO SENDA</title></head><body style="margin:0;background:#2ecc71;padding:10px;font-family:Arial"><div style="max-width:700px;margin:auto;background:white;border:3px solid black"><div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:2px solid black"><div style="display:flex;gap:8px;align-items:center"><div style="width:40px;height:40px;background:#ff6600;border-radius:50%"></div><div style="font-weight:900">SENDA<br>COMUNIDAD</div></div><div style="font-weight:900;font-size:22px">TURNO</div></div><div style="text-align:center;font-weight:700;padding:6px;border-bottom:2px solid black">TURNO PARA ESTUDIO NEUROLOGICO</div><div style="border:3px solid black;margin:8px;padding:8px;font-size:20px;font-weight:700"><u>DIA:</u> '+noche+' <span style="background:#000;color:#fff;padding:0 6px">'+diaNum+'</span> - '+tipo+'</div><div style="border:3px solid black;margin:8px;padding:8px;font-size:20px;font-weight:700;text-align:center"><u>HORA:</u> '+hora.split('-')[0]+'hs - '+ap+' '+no+'</div><div style="border:3px solid black;margin:8px;padding:8px;font-size:16px;font-weight:700">LUGAR: 56 N° 1321 e/ 21 y 22 - '+os+' - DNI '+dni+'<br>'+info.txt+'<br><span style="background:yellow;padding:2px 6px">COSTO: '+precioPart+'</span></div><div style="border:2px solid red;margin:8px;padding:8px;text-align:center;font-size:13px"><b>El dia del estudio:</b><br>- pelo lavado, seco, sin crema<br>- sin esmalte uñas<br>- privación sueño para dormir en consultorio<br>- orden autorizada (IOMA NO REQUIERE SI ES 1RA DEL AÑO)<br>'+(tiene=='NO'?'<b style="color:red">FALTA ORDEN - Traer dia estudio</b>':'')+'</div><div style="padding:8px;font-size:11px;font-weight:700">INFORME 10-15 DIAS PDF - IMPRIMIRLO POR SI SE BORRA - TEL 2215983871<br>ID '+docRef.id+'</div></div><div style="text-align:center;margin-top:10px"><button onclick="window.print()" style="padding:14px 28px;background:#000;color:#fff;font-weight:900;border:none">IMPRIMIR / GUARDAR PDF</button></div></body></html>');
   location.reload();
- }catch(e){alert(e.message); document.getElementById('btn').disabled=false;}
+ }catch(e){alert(e.message);document.getElementById('btn').disabled=false;}
 }
-window.onload=()=>{cambiarHoras(); toggleOrden();};
+window.onload=()=>{cambiarHoras();toggleOrden();mostrarOS();};
 </script>
 <style>body{background:#0f172a;color:#fff;font-family:system-ui;padding:12px}.box{max-width:580px;margin:auto;background:#1e293b;padding:18px;border-radius:18px}input,select{width:100%;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #334155;color:#fff;margin-top:4px}label{font-size:0.7rem;color:#ffd166;margin-top:10px;display:block;font-weight:700}#boxOrden{background:#0f172a;border:1px dashed #334155;padding:10px;border-radius:10px;margin-top:6px}</style>
 </head>
 <body><div class="box">
 <h2 style="text-align:center;color:#00f5d4;margin:0">SENDA - Solicitar Turno</h2>
 <label>Apellidos</label><input id="ap"><label>Nombres</label><input id="no"><label>DNI</label><input id="dni"><label>WhatsApp</label><input id="tel">
-<label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select>
-<label>¿Tenés orden?</label><select id="tieneOrden" onchange="toggleOrden()"><option value="SI">SI, TENGO ORDEN</option><option value="NO">NO TENGO TODAVIA</option></select>
-<div id="boxOrden"><input type="file" accept="image/*" onchange="leerOrden(this)"><div id="avisoOrden" style="font-size:0.8rem;color:#00f5d4"></div></div>
-<label>Tipo</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG</option><option value="PSG_BASAL">PSG BASAL</option><option value="PSG_RESP" selected>PSG RESPIRATORIA (6hs)</option><option value="PSG_DIURNA">PSG DIURNA</option><option value="ICM_CORTO">ICM CORTO</option><option value="ICM_LARGO">ICM LARGO</option></select>
+<label>Obra Social</label><select id="os" onchange="mostrarOS()"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>OSPE PMO</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select>
+<div id="infoOS" style="margin-top:8px"></div>
+<label>¿Tenés orden?</label><select id="tieneOrden" onchange="toggleOrden()"><option value="SI">SI</option><option value="NO">NO TENGO TODAVIA</option></select>
+<div id="boxOrden"><input type="file" accept="image/*" capture="environment" onchange="leerOrden(this)"><div id="avisoOrden" style="font-size:0.8rem;color:#00f5d4"></div></div>
+<label>Tipo</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG - $100.000 Part</option><option value="PSG_BASAL">PSG BASAL/DIURNA - $150.000 Part</option><option value="PSG_NOCTURNA">PSG NOCT - $200.000 Part</option><option value="PSG_RESP" selected>PSG RESPIRATORIA - $350.000 Part</option></select>
 <label>Fecha (Lun Mar Jue)</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso"></div>
 <label>Bloque</label><select id="hora"></select>
 <button id="btn" onclick="enviar()" style="width:100%;padding:14px;margin-top:14px;background:#00f5d4;color:#000;font-weight:900;border:none;border-radius:12px">Solicitar Turno</button>
+<div style="margin-top:12px;font-size:0.7rem;color:#94a3b8;text-align:center">Al solicitar verás costo y si necesitas autorización según tu OS.<br>El comprobante PDF incluye toda la info.</div>
 </div></body></html>
