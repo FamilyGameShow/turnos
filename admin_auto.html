@@ -1,114 +1,198 @@
 <!DOCTYPE html>
-<html lang="es" class="notranslate">
+<html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENDA Admin v6 - Lista Única</title>
+<title>SENDA Admin v10</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
 
-window.cambiarHoras=()=>{
- let t=document.getElementById('tipo').value; let sel=document.getElementById('hora'); sel.innerHTML='';
- if(t=='EEG') sel.innerHTML='<option value="21:00-22:00">21:00-22:00</option><option value="22:00-23:00" selected>22:00-23:00</option>';
- else if(t=='PSG_BASAL') sel.innerHTML='<option value="21:00-23:00">21:00-23:00</option><option value="23:00-01:00">23:00-01:00</option><option value="01:00-03:00">01:00-03:00</option><option value="03:00-05:00">03:00-05:00</option>';
- else sel.innerHTML='<option value="23:00-05:00" selected>23:00-05:00 (6hs)</option><option value="21:00-23:00">21:00-23:00</option>';
+let pacientes=[]; let bloqueos=[]; let mesContable=new Date().getMonth(); let anioContable=new Date().getFullYear();
+
+// PRECIOS - editables desde contabilidad
+let PRECIOS={EEG:7000, EEG_PROLONGADO:8000, PSG_DIURNA:15000, PSG_BASAL:20000, PSG_RESP:40000, ICM_CORTO:30000, ICM_LARGO:60000, PSG_DOM:100000, CLINICA:20000, IOMA_PAGO:15000, PARTICULAR_EEG:25000, PARTICULAR_PSG:80000, PARTICULAR_RESP:120000 };
+
+const BLOQUES={'21:00-22:00':[21,22],'22:00-23:00':[22,23],'21:00-23:00':[21,23],'23:00-01:00':[23,25],'01:00-03:00':[25,27],'03:00-05:00':[27,29],'23:00-05:00':[23,29]};
+function choque(n, exs){ let [ns,ne]=BLOQUES[n]||[0,0]; for(let ex of exs){ if(ex.estado=='CANCELADO')continue; let [es,ee]=BLOQUES[ex.hora]||[0,0]; if(ns<ee&&es<ne)return true;} return false; }
+
+window.cargar=async()=>{
+ let q=query(collection(db,"pacientes_senda"), orderBy("fecha","desc")); let snap=await getDocs(q);
+ pacientes=[]; snap.forEach(d=>{ pacientes.push({id:d.id,...d.data()}); });
+ try{ let qb=await getDocs(collection(db,"bloqueos_senda")); bloqueos=[]; qb.forEach(d=>bloqueos.push({id:d.id,...d.data()})); }catch(e){}
+ renderTabla(); renderCalendario(); renderContabilidad();
+ document.getElementById('totalPac').innerText=pacientes.length;
 }
 
-window.validarDia=()=>{
- let f=document.getElementById('fecha').value; if(!f) return;
- let dia=new Date(f+'T12:00:00').getDay();
- let btn=document.getElementById('btn'); let aviso=document.getElementById('aviso');
- if(dia!==1&&dia!==2&&dia!==4){aviso.innerHTML='❌ Solo LUN MAR JUE'; btn.disabled=true; btn.style.opacity='0.3';}
- else{aviso.innerHTML='✅ '+(dia==1?'LUNES NOCHE':dia==2?'MARTES NOCHE':'JUEVES NOCHE'); btn.disabled=false; btn.style.opacity='1';}
+function estadoColor(p){
+ if(p.estado=='CANCELADO') return '#475569';
+ let pap=p.papeles||{}; let faltas=[];
+ if(!pap.orden_foto &&!p.tiene_orden) faltas.push('Orden');
+ if(!pap.orden_original) faltas.push('Orig');
+ if(p.obra_social!='IOMA' && p.obra_social!='PARTICULAR' &&!pap.autorizacion) faltas.push('Aut');
+ if(faltas.length>0) return '#f59e0b'; // NARANJA solo si falta checklist
+ if(p.estado=='CONFIRMADO') return '#22c55e';
+ if(p.estado=='FALTA_ORDEN') return '#eab308';
+ return '#00f5d4';
 }
 
-window.crearManual=async()=>{
- let ap=document.getElementById('ap').value.toUpperCase(); let no=document.getElementById('no').value.toUpperCase();
- let dni=document.getElementById('dni').value; let fecha=document.getElementById('fecha').value;
- let hora=document.getElementById('hora').value; let tipo=document.getElementById('tipo').value; let os=document.getElementById('os').value;
- if(!ap||!fecha){alert('Falta apellido o fecha');return;}
- let d=new Date(fecha+'T12:00:00'); let noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES';
- await addDoc(collection(db,"pacientes_senda"),{apellidos:ap,nombres:no,dni:dni,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,estado:'CONFIRMADO',origen:'MANUAL',creado:new Date().toISOString()});
- alert('Guardado'); location.reload();
+window.renderTabla=()=>{
+ let filtro=document.getElementById('filtro').value.toUpperCase(); let html='';
+ for(let p of pacientes){
+  if(filtro &&!(p.apellidos?.includes(filtro) || p.dni?.includes(filtro) || p.fecha?.includes(filtro))) continue;
+  let color=estadoColor(p); let pap=p.papeles||{};
+  let faltasTxt=[]; if(!pap.orden_foto &&!p.tiene_orden) faltasTxt.push('Orden'); if(!pap.orden_original) faltasTxt.push('Orig'); if(p.obra_social!='IOMA' && p.obra_social!='PARTICULAR' &&!pap.autorizacion) faltasTxt.push('Aut');
+  html+=`<div style="background:#1e293b;border-left:6px solid ${color};border-radius:12px;padding:10px;margin:8px 0">
+  <div style="display:flex;justify-content:space-between"><b>${p.apellidos} ${p.nombres}</b> <span style="font-size:0.7rem">${p.fecha} ${p.hora} ${p.noche}</span></div>
+  <div style="font-size:0.75rem;color:#94a3b8">${p.tipo_estudio} | ${p.obra_social} | ${p.telefono} | DNI ${p.dni} | ${p.estado} ${faltasTxt.length?'<span style="color:orange">FALTA: '+faltasTxt.join(',')+'</span>':''}</div>
+  <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
+   <button onclick="verFicha('${p.id}')" style="background:#334155;color:#fff;border:none;padding:6px 8px;border-radius:6px;font-size:0.7rem">FICHA</button>
+   <button onclick="verPapeles('${p.id}')" style="background:${faltasTxt.length?'#f59e0b':'#334155'};color:#000;border:none;padding:6px 8px;border-radius:6px;font-size:0.7rem">PAPELES</button>
+   <button onclick="verTecnicos('${p.id}')" style="background:#0ea5e9;color:#fff;border:none;padding:6px 8px;border-radius:6px;font-size:0.7rem">DATOS TECNICOS</button>
+   <button onclick="verInformar('${p.id}')" style="background:#8b5cf6;color:#fff;border:none;padding:6px 8px;border-radius:6px;font-size:0.7rem">INFORMAR</button>
+   <button onclick="confirmar('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:6px 8px;border-radius:6px;font-size:0.7rem">✓ CONFIRMAR + WA</button>
+   <button onclick="cancelar('${p.id}')" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444;padding:6px 8px;border-radius:6px;font-size:0.7rem">Cancelar</button>
+  </div>
+  </div>`;
+ }
+ document.getElementById('lista').innerHTML=html;
 }
 
+// FICHA
+window.verFicha=(id)=>{
+ let p=pacientes.find(x=>x.id==id); let w=window.open('','','width=700,height=900');
+ w.document.write(`<body style="font-family:sans-serif;padding:12px;background:#0f172a;color:#fff"><div style="background:#1e293b;padding:18px;border-radius:14px"><h3>FICHA ${p.apellidos} ${p.nombres}</h3><p>DNI ${p.dni} Tel ${p.telefono} OS ${p.obra_social}</p><p>Fecha ${p.fecha} ${p.hora} ${p.tipo_estudio}</p><p>Estado ${p.estado}</p>${p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;border-radius:8px;border:1px solid #334155">`:'<p>Sin foto orden</p>'}<p>Num estudio: ${p.num_estudio||'-'} Quien hizo: ${p.quien_hizo||'-'} Urgente: ${p.urgente||'NO'}</p><p>Informe: ${p.informe_texto||'-'}</p><button onclick="window.print()">Imprimir</button></div></body>`);
+}
+
+// PAPELES CHECKLIST
+window.verPapeles=(id)=>{
+ let p=pacientes.find(x=>x.id==id); let pap=p.papeles||{orden_foto:!!p.tiene_orden, orden_original:false, autorizacion:false, pago:false, confirmado:false};
+ let html=`<div style="background:#0f172a;color:#fff;font-family:sans-serif;padding:20px;max-width:500px;margin:auto"><h3>PAPELES - ${p.apellidos}</h3>
+ <label><input type="checkbox" id="c1" ${pap.orden_foto?'checked':''}> Orden foto (subida web)</label><br>
+ <label><input type="checkbox" id="c2" ${pap.orden_original?'checked':''}> Orden original traída</label><br>
+ <label><input type="checkbox" id="c3" ${pap.autorizacion?'checked':''}> Autorización OS (IOMA NO necesita)</label><br>
+ <label><input type="checkbox" id="c4" ${pap.pago?'checked':''}> Pago / Diferencial cobrado</label><br>
+ <label><input type="checkbox" id="c5" ${pap.confirmado?'checked':''}> Confirmado WhatsApp</label><br><br>
+ <button onclick="guardarPapeles('${id}')" style="width:100%;padding:12px;background:#f59e0b;color:#000;font-weight:800;border:none;border-radius:8px">Guardar Checklist</button>
+ <p style="font-size:0.7rem;color:#94a3b8;margin-top:8px">Si falta algo quedará NARANJA en lista para Julieta.</p></div>`;
+ let w=window.open('','','width=500,height=600'); w.document.write(html);
+ window.guardarPapeles=async(id)=>{
+  let np={orden_foto: w.document.getElementById('c1').checked, orden_original:w.document.getElementById('c2').checked, autorizacion:w.document.getElementById('c3').checked, pago:w.document.getElementById('c4').checked, confirmado:w.document.getElementById('c5').checked};
+  await updateDoc(doc(db,"pacientes_senda",id),{papeles:np}); w.close(); cargar();
+ }
+}
+
+// DATOS TECNICOS
+window.verTecnicos=(id)=>{
+ let p=pacientes.find(x=>x.id==id);
+ let html=`<div style="background:#0f172a;color:#fff;font-family:sans-serif;padding:20px;max-width:500px;margin:auto"><h3>DATOS TECNICOS - ${p.apellidos}</h3>
+ <label>N° Estudio</label><input id="t1" value="${p.num_estudio||''}" style="width:100%;padding:8px"><br>
+ <label>Quién hizo</label><select id="t2" style="width:100%;padding:8px"><option ${p.quien_hizo=='SEBA'?'selected':''}>SEBA</option><option ${p.quien_hizo=='MARIEL'?'selected':''}>MARIEL</option><option ${p.quien_hizo=='OTRO'?'selected':''}>OTRO</option></select><br>
+ <label>Tipo REAL hecho</label><select id="t3" style="width:100%;padding:8px"><option>EEG</option><option>EEG_PROLONGADO</option><option>PSG_DIURNA</option><option>PSG_BASAL</option><option>PSG_RESP</option><option>ICM_CORTO</option><option>ICM_LARGO</option><option>PSG_DOM</option><option>CLINICA</option></select><br>
+ <label><input type="checkbox" id="t4" ${p.urgente=='SI'?'checked':''}> URGENTE</label><br><label>Obs técnica</label><textarea id="t5" style="width:100%;padding:8px">${p.obs_tecnica||''}</textarea><br><br>
+ <button onclick="guardarTec('${id}')" style="width:100%;padding:12px;background:#0ea5e9;color:#fff;font-weight:800;border:none;border-radius:8px">Guardar y Desbloquear Informar</button></div>`;
+ let w=window.open('','','width=520,height=650'); w.document.write(html);
+ window.guardarTec=async(id)=>{ await updateDoc(doc(db,"pacientes_senda",id),{num_estudio:w.document.getElementById('t1').value, quien_hizo:w.document.getElementById('t2').value, tipo_real:w.document.getElementById('t3').value, urgente:w.document.getElementById('t4').checked?'SI':'NO', obs_tecnica:w.document.getElementById('t5').value, estado:'EN_ESTUDIO'}); w.close(); cargar(); }
+}
+
+// INFORMAR
+window.verInformar=(id)=>{
+ let p=pacientes.find(x=>x.id==id);
+ let html=`<div style="background:#0f172a;color:#fff;font-family:sans-serif;padding:20px;max-width:600px;margin:auto"><h3>INFORMAR - ${p.apellidos}</h3><label>Informe texto</label><textarea id="i1" style="width:100%;height:200px;padding:8px">${p.informe_texto||''}</textarea><br><label>Link PDF informe</label><input id="i2" value="${p.informe_pdf||''}" style="width:100%;padding:8px"><br><br><button onclick="guardarInf('${id}')" style="width:100%;padding:12px;background:#8b5cf6;color:#fff;font-weight:800;border:none;border-radius:8px">Guardar Informe -> Pasa a Contabilidad</button></div>`;
+ let w=window.open('','','width=620,height=700'); w.document.write(html);
+ window.guardarInf=async(id)=>{ await updateDoc(doc(db,"pacientes_senda",id),{informe_texto:w.document.getElementById('i1').value, informe_pdf:w.document.getElementById('i2').value, estado:'INFORMADO'}); w.close(); cargar(); }
+}
+
+// CONFIRMAR + WA
 window.confirmar=async(id)=>{
- await updateDoc(doc(db,"pacientes_senda",id),{estado:'CONFIRMADO',confirmado_el:new Date().toISOString()});
- location.reload();
+ let p=pacientes.find(x=>x.id==id);
+ if(!confirm('¿Confirmar '+p.apellidos+' '+p.fecha+'? Le mandará WhatsApp')) return;
+ await updateDoc(doc(db,"pacientes_senda",id),{estado:'CONFIRMADO', papeles:{...(p.papeles||{}), confirmado:true}});
+ // WhatsApp
+ let dia=p.fecha.split('-')[2]+'/'+p.fecha.split('-')[1]; let msg=`Hola ${p.nombres}! Tu turno SENDA quedó CONFIRMADO: ${p.noche} ${dia} ${p.hora} en 56 N°1321 e/21 y 22. Estudio ${p.tipo_estudio}. Traer pelo lavado seco sin crema, sin esmalte, privación sueño, orden autorizada (IOMA NO requiere). Informe 10-15 dias PDF. Si no podés avisar. Tel 2215983871. ID ${id}. Responde: 1 para cambiar, 2 para cancelar`;
+ let tel=p.telefono.replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
+ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg), '_blank');
+ cargar();
 }
-window.faltaPapel=async(id, nombre, fecha, hora)=>{
- let que=prompt('Qué falta? Ej: ORDEN, AUTORIZACION, DNI, AYUNO','ORDEN / AUTORIZACION');
- if(!que) return;
- await updateDoc(doc(db,"pacientes_senda",id),{estado:'FALTA_PAPEL',falta:que});
- let msg=encodeURIComponent(`Hola Julieta, al paciente ${nombre} del ${fecha} ${hora} le falta: ${que}`);
- window.open(`https://wa.me/?text=${msg}`,'_blank');
- location.reload();
+window.cancelar=async(id)=>{ if(!confirm('Cancelar?'))return; await updateDoc(doc(db,"pacientes_senda",id),{estado:'CANCELADO'}); cargar(); }
+
+// CALENDARIO
+window.renderCalendario=()=>{
+ let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+ let hoy=new Date(); for(let i=0;i<35;i++){ let d=new Date(); d.setDate(hoy.getDate()+i); let iso=d.toISOString().split('T')[0]; let diaSem=d.getDay(); let esHabil=diaSem==1||diaSem==2||diaSem==4; let turnosDia=pacientes.filter(p=>p.fecha==iso && p.estado!='CANCELADO'); let bloq=bloqueos.find(b=>b.fecha==iso); let bg='#1e293b'; let txt=d.getDate()+'/'+(d.getMonth()+1);
+  if(bloq) bg='#ef4444'; else if(turnosDia.length>0){ let hayResp=turnosDia.some(t=>t.hora=='23:00-05:00'); bg=hayResp?'#dc2626':'#f59e0b'; } else if(esHabil) bg='#14532d';
+  html+=`<div onclick="clickDia('${iso}')" style="background:${bg};padding:8px;border-radius:8px;text-align:center;cursor:pointer;min-height:60px"><div style="font-size:0.7rem">${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]}</div><div style="font-weight:700">${txt}</div><div style="font-size:0.6rem">${bloq?bloq.motivo:turnosDia.map(t=>t.apellidos.substring(0,6)).join(',')}</div></div>`;
+ } html+='</div><p style="font-size:0.7rem;color:#94a3b8">Verde libre habil, Amarillo pre-reserva, Rojo ocupado total (RESP) o bloqueado por vos. Tocá para bloquear/desbloquear vacaciones o cambiar miercoles.</p>'; document.getElementById('calendario').innerHTML=html;
 }
-window.corregir=async(id, actual)=>{
- let nuevo=prompt('Corregir datos (obra social, dni, hora). Escribí lo nuevo:', actual);
- if(!nuevo) return;
- await updateDoc(doc(db,"pacientes_senda",id),{obra_social:nuevo.toUpperCase(),corregido_el:new Date().toISOString()});
- location.reload();
-}
-window.cancelar=async(id)=>{
- if(!confirm('Cancelar turno?')) return;
- await updateDoc(doc(db,"pacientes_senda",id),{estado:'CANCELADO'});
- location.reload();
-}
-window.borrar=async(id)=>{
- if(!confirm('Borrar definitivo?')) return;
- await deleteDoc(doc(db,"pacientes_senda",id));
- location.reload();
+window.clickDia=async(fecha)=>{
+ let motivo=prompt('Bloquear '+fecha+'? Escribí motivo (vacaciones, feriado, cambio a miercoles) o dejá vacío para desbloquear. Escribí DESBLOQUEAR para quitar bloqueo');
+ if(motivo===null) return;
+ let ex=bloqueos.find(b=>b.fecha==fecha);
+ if(motivo.toUpperCase()=='DESBLOQUEAR' && ex){ await deleteDoc(doc(db,"bloqueos_senda",ex.id)); }
+ else if(motivo){ let {addDoc:ad}=await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"); await ad(collection(db,"bloqueos_senda"),{fecha:fecha, motivo:motivo, creado:new Date().toISOString()}); }
+ cargar();
 }
 
-async function cargar(){
- let q=query(collection(db,"pacientes_senda"),orderBy("fecha","asc"));
- let snap=await getDocs(q);
- let div=document.getElementById('lista'); let html='';
- let filtro=document.getElementById('filtro').value;
- snap.forEach(s=>{
-  let d=s.data(); let id=s.id;
-  if(filtro!='TODOS' && d.estado!=filtro) return;
-  let color=d.estado=='PRE-RESERVA'?'#f59e0b':d.estado=='CONFIRMADO'?'#22c55e':d.estado=='FALTA_PAPEL'?'#f97316':'#ef4444';
-  let noche=d.noche||''; 
-  html+=`<div style="border-left:4px solid ${color};background:#1e293b;padding:10px;margin:8px 0;border-radius:8px">
-  <b style="color:${color}">${d.estado}</b> - <b>${noche} ${d.fecha} ${d.hora}</b><br>
-  ${d.apellidos} ${d.nombres} - DNI ${d.dni||''} - ${d.obra_social} - ${d.tipo_estudio}
-  ${d.falta?`<br><span style="color:#f97316">FALTA: ${d.falta}</span>`:''}
-  <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-   <button onclick="confirmar('${id}')" style="background:#22c55e;color:#000">✓ Confirmar</button>
-   <button onclick="faltaPapel('${id}','${d.apellidos} ${d.nombres}','${d.fecha}','${d.hora}')" style="background:#f97316;color:#000">⚠️ Falta Papel</button>
-   <button onclick="corregir('${id}','${d.obra_social}')" style="background:#334155;color:#fff">✏️ Corregir</button>
-   <button onclick="cancelar('${id}')" style="background:#475569;color:#fff">Cancelar</button>
-   <button onclick="borrar('${id}')" style="background:#000;color:#ef4444">Borrar</button>
-  </div></div>`;
- });
- div.innerHTML=html||'No hay turnos';
+// CONTABILIDAD
+window.renderContabilidad=()=>{
+ let porMes={}; for(let p of pacientes){ if(p.estado=='CANCELADO')continue; let m=p.fecha?.substring(0,7); if(!m)continue; if(!porMes[m]) porMes[m]={total:0, porTipo:{}, porQuien:{SEBA:0, MARIEL:0, OTRO:0}, lista:[]}; porMes[m].lista.push(p); let tipo=p.tipo_real||p.tipo_estudio||'PSG_BASAL'; let precio=PRECIOS[tipo]||PRECIOS.PSG_BASAL||20000; porMes[m].total+=precio; porMes[m].porTipo[tipo]=(porMes[m].porTipo[tipo]||0)+1; let quien=p.quien_hizo||'MARIEL'; porMes[m].porQuien[quien]=(porMes[m].porQuien[quien]||0)+precio; }
+ let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'; for(let mes in porMes){ html+=`<button onclick="verMes('${mes}')" style="padding:6px 10px;background:#334155;color:#fff;border:none;border-radius:8px">${mes}</button>`;} html+='</div>';
+ let mesActual=new Date().toISOString().substring(0,7); let datos=porMes[mesActual]||{total:0,porTipo:{},porQuien:{}};
+ html+=`<h4>Mes ${mesActual} - TOTAL: $${datos.total||0}</h4>`;
+ html+=`<table style="width:100%;font-size:0.75rem;border-collapse:collapse"><tr style="background:#334155"><th>Estudio</th><th>Cant</th><th>Precio</th><th>Total</th></tr>`;
+ for(let t in datos.porTipo){ let cant=datos.porTipo[t]; let prec=PRECIOS[t]||0; html+=`<tr style="border-bottom:1px solid #334155"><td>${t}</td><td>${cant}</td><td>$${prec}</td><td>$${cant*prec}</td></tr>`; }
+ html+=`</table><p>SEBA: $${datos.porQuien.SEBA||0} | MARIEL: $${datos.porQuien.MARIEL||0}</p>`;
+ html+=`<p style="font-size:0.7rem;color:#94a3b8">Precios editables: ${Object.entries(PRECIOS).map(([k,v])=>k+':$'+v).join(' - ')}</p>`;
+ document.getElementById('conta').innerHTML=html;
+ window.verMes=(mes)=>{ let d=porMes[mes]; alert(mes+'\\nTotal $'+d.total+'\\nSEBA $'+d.porQuien.SEBA+' MARIEL $'+d.porQuien.MARIEL+'\\nDetalle: '+JSON.stringify(d.porTipo)); }
 }
-window.onload=()=>{cambiarHoras(); cargar();};
+
+window.onload=cargar;
 </script>
-<style>body{background:#0f172a;color:#fff;font-family:sans-serif;padding:10px}.box{max-width:700px;margin:auto;background:#1e293b;padding:14px;border-radius:12px;border:1px solid #334155}input,select{width:100%;padding:10px;margin-top:4px;border-radius:8px;background:#0f172a;border:1px solid #334155;color:#fff}label{font-size:0.7rem;color:#ffd166;margin-top:6px;display:block}button{padding:8px 10px;border:none;border-radius:6px;font-weight:bold;cursor:pointer}h2{color:#00f5d4;text-align:center}</style>
+<style>
+body{background:#0f172a;color:#fff;font-family:system-ui;padding:10px}
+.box{max-width:980px;margin:auto}
+input,select{padding:8px;border-radius:8px;background:#0f172a;border:1px solid #334155;color:#fff}
+button{cursor:pointer}
+.tab{padding:10px 14px;background:#1e293b;border:none;color:#fff;border-radius:10px 10px 0 0}
+.tab.active{background:#00f5d4;color:#000;font-weight:800}
+.panel{background:#1e293b;padding:14px;border-radius:0 12px 12px 12px;display:none}
+.panel.active{display:block}
+</style>
 </head>
 <body>
 <div class="box">
-<h2>SENDA ADMIN v6 - Lista Única</h2>
-<p style="font-size:0.75rem;color:#94a3b8;text-align:center">Todo lo que cargan los pacientes + lo manual. Lo ven todos.</p>
-
-<details><summary style="cursor:pointer;color:#ffd166">+ Carga manual (por teléfono)</summary>
-<label>Apellidos</label><input id="ap"><label>Nombres</label><input id="no"><label>DNI</label><input id="dni">
-<label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>OSDE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>IOMA</option><option>PAMI</option><option>OTRA</option></select>
-<label>Tipo</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG 21-22 / 22-23</option><option value="PSG_BASAL">PSG Basal 21-23 / 23-01 / 01-03 / 03-05</option><option value="PSG_RESP" selected>PSG Resp 23-05 (6hs)</option></select>
-<label>Fecha (solo Lun Mar Jue)</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso" style="min-height:18px;font-size:0.8rem"></div>
-<label>Bloque</label><select id="hora"></select>
-<button id="btn" onclick="crearManual()" style="width:100%;margin-top:8px;background:#00f5d4">Guardar Manual como CONFIRMADO</button>
-</details>
-
-<hr style="margin:14px 0;border-color:#334155">
-<label>Filtrar lista</label><select id="filtro" onchange="cargar()"><option value="TODOS">TODOS</option><option value="PRE-RESERVA">PRE-RESERVA</option><option value="CONFIRMADO">CONFIRMADO</option><option value="FALTA_PAPEL">FALTA PAPEL</option><option value="CANCELADO">CANCELADO</option></select>
-
-<div id="lista" style="margin-top:10px">Cargando...</div>
+<h2 style="color:#00f5d4">SENDA Admin v10 - <span id="totalPac">0</span> turnos</h2>
+<div style="display:flex;gap:4px;flex-wrap:wrap">
+<button class="tab active" onclick="showTab(0)">Pacientes</button>
+<button class="tab" onclick="showTab(1)">Calendario</button>
+<button class="tab" onclick="showTab(2)">Contabilidad</button>
 </div>
+
+<div id="p0" class="panel active">
+<input id="filtro" placeholder="Filtrar por apellido, DNI, fecha" oninput="renderTabla()" style="width:100%;padding:12px;margin-bottom:8px">
+<div id="lista"></div>
+</div>
+
+<div id="p1" class="panel">
+<h3>Calendario - Tocá un día para bloquear vacaciones / cambiar a miércoles</h3>
+<div id="calendario"></div>
+</div>
+
+<div id="p2" class="panel">
+<h3>Contabilidad - como tu Excel SEP</h3>
+<div id="conta"></div>
+<div style="margin-top:12px;background:#0f172a;padding:12px;border-radius:10px;border:1px dashed #334155">
+<p style="font-size:0.8rem">Si querés cambiar precios: decime y lo edito. Ahora está:<br>
+EEG $7000, EEG PROL $8000, DIURNA $15000, BASAL $20000, RESP $40000, ICM CORTO $30000, LARGO $60000, IOMA pago $15000</p>
+<p style="font-size:0.7rem;color:#94a3b8">TOTAL A PAGAR = suma de lo que le pagás a SEBA/MARIEL por estudio hecho. ENTRADA TOTAL = lo que cobraste a pacientes. Lo calcula automático por quien hizo en Datos Técnicos.</p>
+</div>
+</div>
+
+</div>
+<script>
+function showTab(i){ document.querySelectorAll('.panel').forEach((p,idx)=>p.classList.toggle('active', idx==i)); document.querySelectorAll('.tab').forEach((t,idx)=>t.classList.toggle('active', idx==i)); }
+</script>
 </body>
 </html>
