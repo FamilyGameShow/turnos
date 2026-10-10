@@ -2,28 +2,15 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENDA Admin v15 - Lista + Ficha + PDF WA</title>
+<title>SENDA Admin v16 - PDF Directo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, query, orderBy, where, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
 let pacientes=[], bloqueos=[], idSel=null;
-
-const OS_INFO_TXT={
- 'IOMA':'IOMA $15.000 dif - NO requiere autoriz si es 1ra del año',
- 'OSDE':'OSDE lo autorizamos nosotros token - sin dif',
- 'OSPE':'OSPE lo autoriza paciente web OSPE - sin dif',
- 'OSPE PMO':'OSPE PMO autoriza Inst Central Medicina',
- 'SWISS MEDICAL':'Swiss no requiere autoriz - sin dif',
- 'GALENO':'Galeno autoriza afiliado - sin costo',
- 'MEDICUS':'Medicus no requiere autoriz',
- 'OMINT':'Omint no requiere autoriz',
- 'PARTICULAR':'PARTICULAR',
- 'PAMI':'PAMI NO TRABAJAMOS',
- 'OTRA':'OTRA OS'
-};
-
+const OS_INFO_TXT={'IOMA':'IOMA $15.000 dif - NO requiere autoriz si es 1ra del año','OSDE':'OSDE lo autorizamos nosotros token - sin dif','OSPE':'OSPE lo autoriza paciente web OSPE','OSPE PMO':'OSPE PMO autoriza Inst Central Medicina','SWISS MEDICAL':'Swiss no requiere autoriz','GALENO':'Galeno autoriza afiliado','MEDICUS':'Medicus no requiere autoriz','OMINT':'Omint no requiere autoriz','PARTICULAR':'PARTICULAR','PAMI':'PAMI NO TRABAJAMOS','OTRA':'OTRA'};
 const PRECIOS_PART={'EEG':'$100.000','PSG_BASAL':'$150.000','PSG_DIURNA':'$150.000','PSG_NOCTURNA':'$200.000','PSG_RESP':'$350.000'};
 
 window.cargar=async()=>{
@@ -33,19 +20,14 @@ window.cargar=async()=>{
  renderLista(); renderCalendario();
  document.getElementById('total').innerText=pacientes.length;
 }
-
 function estadoColor(p){
  if(p.estado=='CANCELADO') return '#475569';
  let pap=p.papeles||{};
  if(!pap.orden_foto &&!p.orden_base64 &&!p.tiene_orden) return '#f59e0b';
- if(!pap.orden_original) return '#f59e0b';
- if(p.obra_social!='IOMA' && p.obra_social!='PARTICULAR' &&!pap.autorizacion && p.obra_social!='SWISS MEDICAL' && p.obra_social!='MEDICUS' && p.obra_social!='OMINT' && p.obra_social!='OSDE') return '#f59e0b';
  if(p.estado=='CONFIRMADO') return '#22c55e';
  if(p.estado=='EN_ESTUDIO') return '#0ea5e9';
- if(p.estado=='INFORMADO') return '#8b5cf6';
  return '#00f5d4';
 }
-
 window.renderLista=()=>{
  let f=document.getElementById('filtro').value.toUpperCase();
  let html='';
@@ -54,17 +36,16 @@ window.renderLista=()=>{
   let color=estadoColor(p);
   let costo=p.costo || (p.obra_social=='PARTICULAR'? (PRECIOS_PART[p.tipo_estudio]||'') : p.obra_social=='IOMA'?'$15.000':'$0');
   html+=`<div style="background:#1e293b;border-left:7px solid ${color};border-radius:12px;padding:10px;margin:8px 0">
-   <div style="display:flex;justify-content:space-between"><b>${p.apellidos||''} ${p.nombres||''}</b><span style="font-size:0.65rem;background:${color};color:#000;padding:2px 6px;border-radius:4px;font-weight:800">${p.estado||''}</span></div>
-   <div style="font-size:0.72rem;color:#cbd5e1">${p.fecha||''} ${p.hora||''} ${p.noche||''} | ${p.tipo_estudio||''} | ${p.obra_social||''} ${costo} | DNI ${p.dni||''} | ${p.telefono||''} | N° ${p.excel?.n_estudio||p.tecnico?.numero_estudio||'-'}</div>
+   <div style="display:flex;justify-content:space-between"><b>${p.apellidos||''} ${p.nombres||''}</b><span style="font-size:0.65rem;background:${color};color:#000;padding:2px 6px;border-radius:4px;font-weight:800">${p.estado||''} ${costo}</span></div>
+   <div style="font-size:0.72rem;color:#cbd5e1">${p.fecha||''} ${p.hora||''} ${p.noche||''} | ${p.tipo_estudio||''} | ${p.obra_social||''} | DNI ${p.dni||''} | ${p.telefono||''} | N° ${p.excel?.n_estudio||p.tecnico?.numero_estudio||'-'}</div>
    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">
-    <button onclick="abrirFichaExcel('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:7px 10px;border-radius:7px;font-weight:900;font-size:0.73rem">📋 FICHA EXCEL</button>
-    <button onclick="confirmarConPDF('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:7px 10px;border-radius:7px;font-weight:800;font-size:0.73rem">✓ CONFIRMAR + PDF + WA</button>
-    <button onclick="verPapeles('${p.id}')" style="background:#334155;color:#fff;border:none;padding:6px 9px;border-radius:6px;font-size:0.68rem">PAPELES</button>
-    <button onclick="cancelar('${p.id}')" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444;padding:6px 9px;border-radius:6px;font-size:0.68rem">X</button>
+    <button onclick="abrirFichaExcel('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:8px 11px;border-radius:8px;font-weight:900;font-size:0.75rem">📋 FICHA</button>
+    <button onclick="confirmarConPDF('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:8px 11px;border-radius:8px;font-weight:900;font-size:0.75rem">📄✓ CONFIRMAR PDF + WA</button>
+    <button onclick="cancelar('${p.id}')" style="background:#1e293b;color:#ef4444;border:1px solid #ef4444;padding:7px 10px;border-radius:7px;font-size:0.7rem">X</button>
    </div>
   </div>`;
  }
- document.getElementById('lista').innerHTML=html;
+ document.getElementById('lista').innerHTML=html||'<p style="color:#94a3b8">Sin pacientes</p>';
 }
 
 // FICHA EXCEL
@@ -74,121 +55,90 @@ window.abrirFichaExcel=(id)=>{
  document.getElementById('e_ap').value=p.apellidos||e.apellidos||''; document.getElementById('e_no').value=p.nombres||e.nombres||'';
  document.getElementById('e_est').value=p.tipo_estudio||e.estudio||''; document.getElementById('e_nest').value=t.numero_estudio||e.n_estudio||'';
  document.getElementById('e_fecha').value=p.fecha||e.fecha||''; document.getElementById('e_os').value=p.obra_social||e.obra_social||'';
- document.getElementById('e_nos').value=e.n_os||''; document.getElementById('e_fnac').value=p.fecha_nacimiento||e.fecha_nac||'';
- document.getElementById('e_edad').value=p.edad||e.edad||''; document.getElementById('e_tel').value=p.telefono||e.telefono||'';
- document.getElementById('e_dom').value=p.domicilio||e.domicilio||''; document.getElementById('e_loc').value=p.localidad||e.localidad||'';
- document.getElementById('e_lugar').value=t.lugar||e.lugar||'SENDA'; document.getElementById('e_med').value=p.medico_solicitante||e.med_solic||'';
- document.getElementById('e_tec').value=t.nombre||e.tecnico||'SEBASTIAN'; document.getElementById('e_diag').value=p.diagnostico||e.diagnostico||'';
- document.getElementById('e_medica').value=p.medicacion||e.medicacion||''; document.getElementById('e_obs').value=t.observaciones||e.observacion||'';
- document.getElementById('e_dni').value=p.dni||e.dni||''; document.getElementById('e_colab').value=t.colaboracion||e.colaboracion||'BUENA';
- document.getElementById('e_mont').value=t.montaje||e.montaje||'PROTOCOLO 3'; document.getElementById('e_hora').value=p.hora||e.hora||'';
- document.getElementById('e_peso').value=t.peso||e.peso_sahos||''; document.getElementById('e_talla').value=t.talla||e.talla_sahos||'';
- document.getElementById('e_informa').value=t.informa||e.informa||'FITO'; document.getElementById('e_gest').value=t.edad_gestacional||e.edad_gest||'';
- document.getElementById('e_parto').value=t.parto||e.parto||''; document.getElementById('e_peso_nac').value=t.peso_nacer||e.peso_nac||'';
- document.getElementById('e_talla_nac').value=t.talla_nacer||e.talla||''; document.getElementById('e_oxig').value=t.oxigeno||e.oxigeno||'NO';
- document.getElementById('e_mail').value=p.email||e.mail||''; document.getElementById('e_costo').value=p.costo||e.costo||'';
+ document.getElementById('e_fnac').value=p.fecha_nacimiento||e.fecha_nac||''; document.getElementById('e_edad').value=p.edad||e.edad||'';
+ document.getElementById('e_tel').value=p.telefono||e.telefono||''; document.getElementById('e_dom').value=p.domicilio||e.domicilio||'';
+ document.getElementById('e_loc').value=p.localidad||e.localidad||''; document.getElementById('e_lugar').value=t.lugar||e.lugar||'SENDA';
+ document.getElementById('e_med').value=p.medico_solicitante||e.med_solic||''; document.getElementById('e_tec').value=t.nombre||e.tecnico||'SEBASTIAN';
+ document.getElementById('e_diag').value=p.diagnostico||e.diagnostico||''; document.getElementById('e_medica').value=p.medicacion||e.medicacion||'';
+ document.getElementById('e_obs').value=t.observaciones||e.observacion||''; document.getElementById('e_dni').value=p.dni||e.dni||'';
+ document.getElementById('e_colab').value=t.colaboracion||e.colaboracion||'BUENA'; document.getElementById('e_mont').value=t.montaje||e.montaje||'PROTOCOLO 3';
+ document.getElementById('e_hora').value=p.hora||e.hora||''; document.getElementById('e_peso').value=t.peso||e.peso_sahos||'';
+ document.getElementById('e_talla').value=t.talla||e.talla_sahos||''; document.getElementById('e_informa').value=t.informa||e.informa||'FITO';
+ document.getElementById('e_gest').value=t.edad_gestacional||e.edad_gest||''; document.getElementById('e_parto').value=t.parto||e.parto||'';
+ document.getElementById('e_peso_nac').value=t.peso_nacer||e.peso_nac||''; document.getElementById('e_talla_nac').value=t.talla_nacer||e.talla||'';
+ document.getElementById('e_oxig').value=t.oxigeno||e.oxigeno||'NO'; document.getElementById('e_mail').value=p.email||e.mail||'';
+ document.getElementById('e_costo').value=p.costo||e.costo||'';
  let chk=e.checks||t.sensores||{}; ['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO'].forEach(k=>{document.getElementById('chk_'+k).checked=!!chk[k];});
- document.getElementById('e_orden_prev').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:160px">`:'';
+ document.getElementById('e_orden_prev').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:160px;border:1px solid #000">`:'Sin orden';
 }
 window.guardarExcel=async()=>{
  let chk={}; ['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO'].forEach(k=>{chk[k]=document.getElementById('chk_'+k).checked;});
- let excel={apellidos:document.getElementById('e_ap').value.toUpperCase(), nombres:document.getElementById('e_no').value.toUpperCase(), estudio:document.getElementById('e_est').value, n_estudio:document.getElementById('e_nest').value, fecha:document.getElementById('e_fecha').value, obra_social:document.getElementById('e_os').value, n_os:document.getElementById('e_nos').value, fecha_nac:document.getElementById('e_fnac').value, edad:document.getElementById('e_edad').value, telefono:document.getElementById('e_tel').value, domicilio:document.getElementById('e_dom').value, localidad:document.getElementById('e_loc').value, lugar:document.getElementById('e_lugar').value, med_solic:document.getElementById('e_med').value, tecnico:document.getElementById('e_tec').value, diagnostico:document.getElementById('e_diag').value, medicacion:document.getElementById('e_medica').value, observacion:document.getElementById('e_obs').value, dni:document.getElementById('e_dni').value, colaboracion:document.getElementById('e_colab').value, montaje:document.getElementById('e_mont').value, hora:document.getElementById('e_hora').value, peso_sahos:document.getElementById('e_peso').value, talla_sahos:document.getElementById('e_talla').value, informa:document.getElementById('e_informa').value, edad_gest:document.getElementById('e_gest').value, parto:document.getElementById('e_parto').value, peso_nac:document.getElementById('e_peso_nac').value, talla:document.getElementById('e_talla_nac').value, oxigeno:document.getElementById('e_oxig').value, mail:document.getElementById('e_mail').value, costo:document.getElementById('e_costo').value, checks:chk};
+ let excel={apellidos:document.getElementById('e_ap').value.toUpperCase(), nombres:document.getElementById('e_no').value.toUpperCase(), estudio:document.getElementById('e_est').value, n_estudio:document.getElementById('e_nest').value, fecha:document.getElementById('e_fecha').value, obra_social:document.getElementById('e_os').value, fecha_nac:document.getElementById('e_fnac').value, edad:document.getElementById('e_edad').value, telefono:document.getElementById('e_tel').value, domicilio:document.getElementById('e_dom').value, localidad:document.getElementById('e_loc').value, lugar:document.getElementById('e_lugar').value, med_solic:document.getElementById('e_med').value, tecnico:document.getElementById('e_tec').value, diagnostico:document.getElementById('e_diag').value, medicacion:document.getElementById('e_medica').value, observacion:document.getElementById('e_obs').value, dni:document.getElementById('e_dni').value, colaboracion:document.getElementById('e_colab').value, montaje:document.getElementById('e_mont').value, hora:document.getElementById('e_hora').value, peso_sahos:document.getElementById('e_peso').value, talla_sahos:document.getElementById('e_talla').value, informa:document.getElementById('e_informa').value, edad_gest:document.getElementById('e_gest').value, parto:document.getElementById('e_parto').value, peso_nac:document.getElementById('e_peso_nac').value, talla:document.getElementById('e_talla_nac').value, oxigeno:document.getElementById('e_oxig').value, mail:document.getElementById('e_mail').value, costo:document.getElementById('e_costo').value, checks:chk};
  let tecnico={numero_estudio:excel.n_estudio, lugar:excel.lugar, colaboracion:excel.colaboracion, montaje:excel.montaje, observaciones:excel.observacion, sensores:chk, peso:excel.peso_sahos, talla:excel.talla_sahos, edad_gestacional:excel.edad_gest, parto:excel.parto, peso_nacer:excel.peso_nac, talla_nacer:excel.talla, oxigeno:excel.oxigeno, informa:excel.informa, nombre:excel.tecnico};
  await updateDoc(doc(db,"pacientes_senda",idSel),{apellidos:excel.apellidos, nombres:excel.nombres, dni:excel.dni, fecha_nacimiento:excel.fecha_nac, edad:excel.edad, telefono:excel.telefono, domicilio:excel.domicilio, localidad:excel.localidad, obra_social:excel.obra_social, medico_solicitante:excel.med_solic, diagnostico:excel.diagnostico, medicacion:excel.medicacion, fecha:excel.fecha, hora:excel.hora, tipo_estudio:excel.estudio, costo:excel.costo, excel:excel, tecnico:tecnico});
  document.getElementById('modalExcel').style.display='none'; cargar();
 }
 
-// CONFIRMAR + PDF + WA
+// CONFIRMAR QUE BAJA PDF DE VERDAD
 window.confirmarConPDF=async(id)=>{
  let p=pacientes.find(x=>x.id==id);
  let costoTxt=p.costo || (p.obra_social=='PARTICULAR'? (PRECIOS_PART[p.tipo_estudio]||'') : p.obra_social=='IOMA'?'$15.000':'$0');
  let infoTxt=OS_INFO_TXT[p.obra_social]||''; if(p.obra_social=='PARTICULAR') infoTxt='PARTICULAR '+costoTxt;
  let diaNum=(p.fecha||'').split('-')[2]+'/'+(p.fecha||'').split('-')[1];
 
- // 1. Crear ventana PDF y auto imprimir/guardar
- let w=window.open('','','width=850,height=950');
- let htmlPDF=`<html><head><meta charset="UTF-8"><title>TURNO ${p.apellidos}</title></head><body style="margin:0;background:#2ecc71;padding:10px;font-family:Arial, sans-serif">
- <div style="max-width:720px;margin:auto;background:white;border:3px solid #000">
-  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:3px solid #000"><div style="display:flex;align-items:center;gap:10px"><div style="width:44px;height:44px;background:linear-gradient(orange,purple);border-radius:50%"></div><div style="font-weight:900;line-height:1">SENDA<br>COMUNIDAD</div></div><div style="font-size:28px;font-weight:900">TURNO</div></div>
-  <div style="text-align:center;font-weight:800;padding:6px;border-bottom:2px solid #000;font-size:14px">TURNO PARA ESTUDIO NEUROLOGICO - ${p.tipo_estudio}</div>
-  <div style="border:3px solid #000;margin:10px;padding:12px;font-size:22px;font-weight:900"><u>DIA:</u> ${p.noche||''} <span style="border:2px solid #000;padding:2px 10px;background:#000;color:#fff">${diaNum||''}</span></div>
-  <div style="border:3px solid #000;margin:10px;padding:12px;font-size:22px;font-weight:900;text-align:center"><u>HORA:</u> ${(p.hora||'').split('-')[0]}hs</div>
-  <div style="border:3px solid #000;margin:10px;padding:12px;font-size:16px;font-weight:700;line-height:1.4">
-   LUGAR: 56 N°1321 e/21 y 22 La Plata<br>
-   PACIENTE: ${p.apellidos||''} ${p.nombres||''} DNI ${p.dni||''}<br>
-   TEL: ${p.telefono||''} | OS: ${p.obra_social||''} - ${infoTxt}<br>
-   COSTO: <span style="background:yellow;padding:2px 8px">${costoTxt}</span><br>
-   TIPO: ${p.tipo_estudio||''}
-  </div>
-  <div style="text-align:center;font-size:11px">En caso de no poder concurrir avisar con anticipación - TEL 2215983871</div>
-  <div style="border:2px solid red;margin:10px;padding:10px;font-size:13px;text-align:center">
-   <b>El día del estudio:</b><br>
-   - pelo lavado, pero seco, sin crema de enjuague ni otros productos<br>
-   - sin esmalte de uñas<br>
-   - privación de sueño suficiente como para dormir en el consultorio<br>
-   - <b>orden autorizada (IOMA NO REQUIERE SI ES 1RA DEL AÑO)</b><br>
-   ${infoTxt}
-  </div>
-  <div style="padding:10px;font-size:11px;font-weight:800">EL INFORME SERA ENVIADO DENTRO DE LOS 10 A 15 DIAS, EN FORMATO PDF, POR FAVOR IMPRIMIRLO.<div style="text-align:right;font-size:18px">TEL: 2215983871</div><div style="font-size:9px;color:#555">ID: ${id} - ${new Date().toLocaleString()}</div></div>
- </div>
- <div style="text-align:center;margin-top:14px"><button onclick="window.print()" style="padding:16px 32px;background:#000;color:#fff;font-weight:900;border:none;cursor:pointer;font-size:16px">IMPRIMIR / GUARDAR PDF</button><p style="font-size:12px">Guardá el PDF y adjuntalo en WhatsApp</p></div>
- </body></html>`;
- w.document.write(htmlPDF);
- w.document.close();
+ const { jsPDF } = window.jspdf;
+ const doc = new jsPDF();
+ doc.setFillColor(46,204,113); doc.rect(0,0,210,14,'F');
+ doc.setFontSize(10); doc.setTextColor(0,0,0); doc.setFont(undefined,'bold'); doc.text('SENDA COMUNIDAD',10,9);
+ doc.setFontSize(18); doc.text('TURNO',160,10);
+ doc.setFontSize(12); doc.text('TURNO PARA ESTUDIO NEUROLOGICO - '+(p.tipo_estudio||''),10,22);
+ doc.setLineWidth(0.7); doc.rect(10,26,190,14); doc.setFontSize(15); doc.text(`DIA: ${p.noche||''} ${diaNum} `,12,35);
+ doc.rect(10,42,190,14); doc.text(`HORA: ${(p.hora||'').split('-')[0]} hs - ${p.apellidos||''} ${p.nombres||''}`,12,51);
+ doc.rect(10,58,190,42); doc.setFontSize(11);
+ doc.text(`LUGAR: 56 N 1321 e/ 21 y 22 La Plata`,12,66);
+ doc.text(`PACIENTE: ${p.apellidos||''} ${p.nombres||''} DNI ${p.dni||''}`,12,72);
+ doc.text(`TEL: ${p.telefono||''} OS: ${p.obra_social||''} - ${infoTxt}`,12,78);
+ doc.setFontSize(13); doc.setFillColor(255,255,0); doc.rect(12,82,100,9,'F'); doc.setFont(undefined,'bold'); doc.text(`COSTO: ${costoTxt}`,13,88);
+ doc.setFontSize(9); doc.setFont(undefined,'normal');
+ doc.setDrawColor(255,0,0); doc.rect(10,102,190,36);
+ doc.text('El dia del estudio:',12,108);
+ doc.text('- pelo lavado, seco, sin crema de enjuague ni otros productos',12,113);
+ doc.text('- sin esmalte de unas',12,117);
+ doc.text('- privacion de sueno suficiente para dormir en consultorio',12,121);
+ doc.text('- orden autorizada (IOMA NO REQUIERE SI ES 1RA DEL ANO)',12,125);
+ doc.text(infoTxt,12,130);
+ doc.text(`Informe 10-15 dias PDF - TEL 2215983871 - ID ${id}`,10,145);
+ let nombreArchivo=`TURNO_SENDA_${(p.apellidos||'PACIENTE').replace(/ /g,'_')}_${diaNum.replace('/','-')}.pdf`;
+ doc.save(nombreArchivo);
 
- // 2. Marcar confirmado
  await updateDoc(doc(db,"pacientes_senda",id),{estado:'CONFIRMADO', costo:costoTxt, papeles:{...(p.papeles||{}), confirmado:true}});
 
- // 3. Abrir WA con texto
  let msg=`Hola ${p.nombres}! ✅ Tu turno SENDA CONFIRMADO:
 
-📅 ${p.noche||''} ${diaNum||''} ${(p.hora||'').split('-')[0]}hs
+📅 ${p.noche||''} ${diaNum} ${(p.hora||'').split('-')[0]}hs
 📍 56 N°1321 e/21 y 22 La Plata
 🧠 ${p.tipo_estudio||''}
 🏥 ${p.obra_social||''} - ${infoTxt}
 💰 Costo: ${costoTxt}
 
 Indicaciones:
-- Pelo lavado, seco, sin crema
+- Pelo lavado seco sin crema
 - Sin esmalte uñas
 - Privación sueño
 - Orden autorizada
 
-Informe 10-15 días PDF.
-TEL 2215983871
+Informe 10-15 días PDF. TEL 2215983871
 
-Te adjunto comprobante PDF 👇 (archivo que se acaba de descargar)
-
-ID ${id}`;
+Te adjunto comprobante PDF 👇`;
 
  let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
- setTimeout(()=>{ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank'); }, 900);
+ setTimeout(()=>{ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank'); }, 1000);
  cargar();
 }
-
-window.verPapeles=(id)=>{
- let p=pacientes.find(x=>x.id==id); let pap=p.papeles||{};
- let w=window.open('','','width=480,height=500');
- w.document.write(`<body style="font-family:sans-serif;padding:14px"><h3>PAPELES ${p.apellidos}</h3>
- <label><input type="checkbox" id="c1" ${pap.orden_foto?'checked':''}> Orden foto</label><br>
- <label><input type="checkbox" id="c2" ${pap.orden_original?'checked':''}> Orden original</label><br>
- <label><input type="checkbox" id="c3" ${pap.autorizacion?'checked':''}> Autorización</label><br>
- <label><input type="checkbox" id="c4" ${pap.pago?'checked':''}> Pago</label><br>
- <label><input type="checkbox" id="c5" ${pap.confirmado?'checked':''}> Confirmado WA</label><br><br>
- <button id="b" style="width:100%;padding:12px;background:#f59e0b;font-weight:900;border:none">Guardar</button>
- <script>document.getElementById('b').onclick=()=>{window.opener.postMessage({t:'pap',id:'${id}',pap:{orden_foto:document.getElementById('c1').checked,orden_original:document.getElementById('c2').checked,autorizacion:document.getElementById('c3').checked,pago:document.getElementById('c4').checked,confirmado:document.getElementById('c5').checked}},'*');window.close();}<\/script></body>`);
-}
-window.addEventListener('message', async(e)=>{
- if(e.data.t=='pap'){ await updateDoc(doc(db,"pacientes_senda",e.data.id),{papeles:e.data.pap}); cargar(); }
-});
-
 window.cancelar=async(id)=>{ if(!confirm('Cancelar?'))return; await updateDoc(doc(db,"pacientes_senda",id),{estado:'CANCELADO'}); cargar(); }
 window.renderCalendario=()=>{
  let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
- let hoy=new Date(); for(let i=0;i<35;i++){ let d=new Date(); d.setDate(hoy.getDate()+i); let iso=d.toISOString().split('T')[0]; let turnosDia=pacientes.filter(p=>p.fecha==iso && p.estado!='CANCELADO'); let bloq=bloqueos.find(b=>b.fecha==iso); let bg='#1e293b';
-  if(bloq) bg='#ef4444'; else if(turnosDia.length>0){ let hayResp=turnosDia.some(t=>t.hora=='23:00-05:00'); bg=hayResp?'#dc2626':'#f59e0b'; } else if([1,2,4].includes(d.getDay())) bg='#14532d';
-  html+=`<div style="background:${bg};padding:8px;border-radius:8px;text-align:center"><div style="font-size:0.6rem">${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]}</div><div style="font-weight:700">${d.getDate()}/${d.getMonth()+1}</div><div style="font-size:0.6rem">${bloq?bloq.motivo:turnosDia.map(t=>t.apellidos.substring(0,5)).join(',')}</div></div>`;
- } html+='</div>'; document.getElementById('calendario').innerHTML=html;
+ let hoy=new Date(); for(let i=0;i<35;i++){ let d=new Date(); d.setDate(hoy.getDate()+i); let iso=d.toISOString().split('T')[0]; let turnosDia=pacientes.filter(p=>p.fecha==iso && p.estado!='CANCELADO'); let bloq=bloqueos.find(b=>b.fecha==iso); let bg='#1e293b'; if(bloq) bg='#ef4444'; else if(turnosDia.length>0) bg='#f59e0b'; else if([1,2,4].includes(d.getDay())) bg='#14532d'; html+=`<div style="background:${bg};padding:8px;border-radius:8px;text-align:center"><div style="font-size:0.6rem">${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]}</div><div style="font-weight:700">${d.getDate()}/${d.getMonth()+1}</div><div style="font-size:0.55rem">${bloq?bloq.motivo:turnosDia.map(t=>t.apellidos.substring(0,5)).join(',')}</div></div>`;} html+='</div>'; document.getElementById('calendario').innerHTML=html;
 }
 window.onload=cargar;
 </script>
@@ -207,31 +157,30 @@ table{border-collapse:collapse;width:100%;font-size:12px} td{border:1px solid #0
 </head>
 <body>
 <div class="box">
-<h2 style="color:#00f5d4">SENDA Admin v15 - <span id="total">0</span> turnos - LISTA + FICHA + PDF</h2>
-<div style="display:flex;gap:4px;margin-bottom:8px"><button class="tab active" onclick="showTab(0)">📋 LISTA TRABAJO</button><button class="tab" onclick="showTab(1)">🗓️ CALENDARIO</button></div>
-<div id="p0" class="panel active"><input id="filtro" placeholder="Buscar apellido DNI fecha" oninput="renderLista()" style="padding:12px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#fff;margin-bottom:8px"><div id="lista"></div></div>
-<div id="p1" class="panel"><div id="calendario"></div></div>
+<h2 style="color:#00f5d4">SENDA Admin v16 - <span id="total">0</span> | 📄 Baja PDF directo</h2>
+<div style="display:flex;gap:4px;margin-bottom:8px"><button class="tab active" onclick="document.getElementById('p0').style.display='block';document.getElementById('p1').style.display='none';">📋 LISTA</button><button class="tab" onclick="document.getElementById('p0').style.display='none';document.getElementById('p1').style.display='block';">🗓️ CALENDARIO</button></div>
+<div id="p0"><input id="filtro" placeholder="Buscar apellido DNI" oninput="renderLista()" style="padding:12px;background:#1e293b;border:1px solid #334155;border-radius:10px;color:#fff;margin-bottom:8px;width:100%;box-sizing:border-box"><div id="lista"></div></div>
+<div id="p1" style="display:none"><div id="calendario"></div></div>
 </div>
 
 <div id="modalExcel">
 <div style="background:white;color:#000;max-width:1060px;margin:auto;border:3px solid #000;width:100%">
-<div style="display:flex;justify-content:space-between;padding:8px;background:#1e293b;color:#fff"><b>FICHA EXCEL SENDA - con Costo</b><button onclick="document.getElementById('modalExcel').style.display='none'" style="padding:6px 14px;background:#ef4444;color:#fff;border:none;border-radius:6px">X</button></div>
+<div style="display:flex;justify-content:space-between;padding:8px;background:#1e293b;color:#fff"><b>FICHA EXCEL SENDA</b><button onclick="document.getElementById('modalExcel').style.display='none'" style="padding:6px 14px;background:#ef4444;color:#fff;border:none;border-radius:6px">X</button></div>
 <table>
 <tr><td class="verde" style="width:85px">APELLIDOS:</td><td colspan="2"><input id="e_ap"></td><td class="verde">NOMBRES:</td><td colspan="2"><input id="e_no"></td><td class="verde">OTROS</td><td class="verde">SI</td><td class="verde">NO</td><td class="naranja">POR SAHOS</td><td></td></tr>
 <tr><td class="verde">ESTUDIO:</td><td><input id="e_est"></td><td class="verde">N°</td><td><input id="e_nest"></td><td class="verde">FECHA:</td><td><input id="e_fecha" type="date"></td><td>URGENTE</td><td><input type="checkbox" id="chk_URGENTE"></td><td></td><td class="naranja">PESO</td><td><input id="e_peso"></td></tr>
-<tr><td class="verde">OBRA SOCIAL:</td><td><input id="e_os"></td><td class="verde">COSTO</td><td><input id="e_costo"></td><td></td><td><input id="e_nos" placeholder="N° OS"></td><td>EKG</td><td><input type="checkbox" id="chk_EKG"></td><td></td><td class="naranja">TALLA</td><td><input id="e_talla"></td></tr>
+<tr><td class="verde">OBRA SOCIAL:</td><td><input id="e_os"></td><td class="verde">COSTO</td><td><input id="e_costo"></td><td colspan="2"><div id="e_orden_prev"></div></td><td>EKG</td><td><input type="checkbox" id="chk_EKG"></td><td></td><td class="naranja">TALLA</td><td><input id="e_talla"></td></tr>
 <tr><td class="verde">FECH. NAC.</td><td><input id="e_fnac" type="date"></td><td class="verde">EDAD:</td><td><input id="e_edad"></td><td class="verde">TELEFONO:</td><td><input id="e_tel"></td><td>F.A.</td><td><input type="checkbox" id="chk_FA"></td><td></td><td class="naranja">INFORMA</td><td><input id="e_informa"></td></tr>
 <tr><td class="verde">DOMICILIO</td><td><input id="e_dom"></td><td class="verde">LOCALIDAD</td><td colspan="3"><input id="e_loc"></td><td>OXIMETRIA</td><td><input type="checkbox" id="chk_OXIMETRIA"></td><td></td><td class="celeste">NIÑOS</td><td class="celeste"></td></tr>
 <tr><td class="verde">LUGAR</td><td><select id="e_lugar"><option>SENDA</option><option>DOMICILIO</option><option>ESPAÑOL</option></select></td><td class="verde">MED. SOLICITANTE:</td><td colspan="3"><input id="e_med"></td><td>EMG</td><td><input type="checkbox" id="chk_EMG"></td><td></td><td class="celeste">EDAD GESTACIONAL</td><td><input id="e_gest"></td></tr>
 <tr><td class="verde">TECNICO:</td><td><input id="e_tec"></td><td class="verde">DIAGNOSTICO:</td><td colspan="3"><input id="e_diag"></td><td>EOG</td><td><input type="checkbox" id="chk_EOG"></td><td></td><td class="celeste">PARTO?</td><td><input id="e_parto"></td></tr>
 <tr><td class="verde">MEDICACION</td><td colspan="5"><input id="e_medica"></td><td>TORAX</td><td><input type="checkbox" id="chk_TORAX"></td><td></td><td class="celeste">PESO AL NACER</td><td><input id="e_peso_nac"></td></tr>
 <tr><td class="verde">OBSERVACION:</td><td colspan="2"><input id="e_obs"></td><td class="verde">DNI:</td><td colspan="2"><input id="e_dni"></td><td>ABDOMEN</td><td><input type="checkbox" id="chk_ABDOMEN"></td><td></td><td class="celeste">TALLA</td><td><input id="e_talla_nac"></td></tr>
-<tr><td colspan="3"><div id="e_orden_prev"></div></td><td class="verde">COLABORACION:</td><td><select id="e_colab"><option>BUENA</option><option>MALA</option></select></td><td></td><td>RONQUIDOS</td><td><input type="checkbox" id="chk_RONQUIDOS"></td><td></td><td class="celeste">OXIGENO</td><td><select id="e_oxig"><option>NO</option><option>SI</option></select></td></tr>
-<tr><td class="verde">MONTAJE:</td><td><select id="e_mont"><option>HALO + PARASAJITAL</option><option>FRONTALES SABRI</option><option>PROTOCOLO 3</option></select></td><td class="verde">HORA:</td><td><input id="e_hora"></td><td class="verde">MAIL</td><td><input id="e_mail"></td><td>HIPERNEA</td><td><input type="checkbox" id="chk_HIPERNEA"></td><td></td><td class="celeste">FOTO</td><td><input type="checkbox" id="chk_FOTO"></td></tr>
+<tr><td class="verde">MONTAJE:</td><td><select id="e_mont"><option>HALO + PARASAJITAL</option><option>FRONTALES SABRI</option><option>PROTOCOLO 3</option></select></td><td class="verde">COLAB:</td><td><select id="e_colab"><option>BUENA</option><option>MALA</option></select></td><td class="verde">HORA:</td><td><input id="e_hora"></td><td>RONQUIDOS</td><td><input type="checkbox" id="chk_RONQUIDOS"></td><td></td><td class="celeste">OXIGENO</td><td><select id="e_oxig"><option>NO</option><option>SI</option></select></td></tr>
+<tr><td class="verde">MAIL</td><td><input id="e_mail"></td><td colspan="4"></td><td>HIPERNEA</td><td><input type="checkbox" id="chk_HIPERNEA"></td><td></td><td class="celeste">FOTO</td><td><input type="checkbox" id="chk_FOTO"></td></tr>
 </table>
 <button onclick="guardarExcel()" style="width:100%;padding:15px;background:#d9f99d;color:#000;font-weight:900;border:none;font-size:16px;margin-top:4px">💾 GUARDAR FICHA</button>
 </div>
 </div>
-<script>function showTab(i){document.querySelectorAll('.panel').forEach((p,idx)=>p.classList.toggle('active',idx==i));document.querySelectorAll('.tab').forEach((t,idx)=>t.classList.toggle('active',idx==i));}</script>
 </body>
 </html>
