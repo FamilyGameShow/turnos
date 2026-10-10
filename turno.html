@@ -1,150 +1,64 @@
 <!DOCTYPE html>
-<html lang="es" class="notranslate">
+<html lang="es">
 <head>
-<meta charset="UTF-8"><meta name="google" content="notranslate">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENDA - Turno v9</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENDA - Turno v10</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
-
-let ordenBase64="";
-window.toggleOrden=()=>{
- let tiene=document.getElementById('tieneOrden').value;
- document.getElementById('boxOrden').style.display = tiene=='SI'? 'block':'none';
- document.getElementById('avisoOrden').innerHTML = tiene=='NO'? '⚠️ Quedará como FALTA ORDEN' : '';
-}
-window.leerOrden=(input)=>{
- let f=input.files[0]; if(!f) return;
- if(f.size>2500000){alert('Foto muy pesada, bájale calidad'); input.value=''; return;}
- let r=new FileReader(); r.onload=e=>{ordenBase64=e.target.result; document.getElementById('avisoOrden').innerHTML='✅ Orden cargada';}; r.readAsDataURL(f);
-}
-
-const BLOQUES={
- '21:00-22:00':[21,22],
- '22:00-23:00':[22,23],
- '21:00-23:00':[21,23],
- '23:00-01:00':[23,25],
- '01:00-03:00':[25,27],
- '03:00-05:00':[27,29],
- '23:00-05:00':[23,29]
-};
-function hayChoque(nuevo, existentes){
- let [ns,ne]=BLOQUES[nuevo]||[0,0];
- for(let ex of existentes){
-   if(ex.estado=='CANCELADO') continue;
-   let [es,ee]=BLOQUES[ex.hora]||[0,0];
-   if(ns < ee && es < ne) return ex;
- }
- return null;
-}
-
+let ordenB64="";
+window.toggleOrden=()=>{ document.getElementById('boxOrden').style.display=document.getElementById('tieneOrden').value=='SI'?'block':'none'; }
+window.leerOrden=(i)=>{ let f=i.files[0]; if(!f)return; if(f.size>2500000){alert('Muy pesada');return;} let r=new FileReader(); r.onload=e=>{ordenB64=e.target.result; document.getElementById('avisoOrden').innerHTML='✅ Cargada'}; r.readAsDataURL(f); }
+const BLOQUES={'21:00-22:00':[21,22],'22:00-23:00':[22,23],'21:00-23:00':[21,23],'23:00-01:00':[23,25],'01:00-03:00':[25,27],'03:00-05:00':[27,29],'23:00-05:00':[23,29]};
+function choque(n, exs){ let [ns,ne]=BLOQUES[n]||[0,0]; for(let ex of exs){ if(ex.estado=='CANCELADO')continue; let [es,ee]=BLOQUES[ex.hora]||[0,0]; if(ns<ee&&es<ne)return ex;} return null; }
 window.cambiarHoras=async()=>{
- let t=document.getElementById('tipo').value; let sel=document.getElementById('hora'); let fecha=document.getElementById('fecha').value;
- let opciones=[];
- if(t=='EEG') opciones=['21:00-22:00','22:00-23:00'];
- else if(t=='PSG_BASAL') opciones=['21:00-23:00','23:00-01:00','01:00-03:00','03:00-05:00'];
- else opciones=['23:00-05:00'];
-
- let ocupados=[];
- if(fecha){
-  try{
-   let q=query(collection(db,"pacientes_senda"), where("fecha","==",fecha));
-   let snap=await getDocs(q); snap.forEach(s=>ocupados.push(s.data()));
-  }catch(e){}
- }
- sel.innerHTML='';
- for(let op of opciones){
-   let choque=hayChoque(op, ocupados);
-   let opt=document.createElement('option'); opt.value=op;
-   opt.text = choque? `${op} ❌ OCUPADO por ${choque.apellidos}` : op;
-   if(choque) opt.disabled=true;
-   sel.appendChild(opt);
- }
- if(sel.options.length>0 &&!sel.value) sel.selectedIndex=0;
- // si no hay ocupados, seleccionar default lindo
- if(ocupados.length==0 && t=='PSG_RESP') sel.value='23:00-05:00';
+ let t=document.getElementById('tipo').value, sel=document.getElementById('hora'), fecha=document.getElementById('fecha').value;
+ let ops=t=='EEG'?['21:00-22:00','22:00-23:00']:t=='PSG_BASAL'?['21:00-23:00','23:00-01:00','01:00-03:00','03:00-05:00']:['23:00-05:00'];
+ let ocup=[]; if(fecha){ try{ let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha)); let s=await getDocs(q); s.forEach(d=>ocup.push(d.data())); }catch(e){} }
+ sel.innerHTML=''; for(let op of ops){ let ch=choque(op,ocup); let o=document.createElement('option'); o.value=op; o.text=ch?op+' ❌ OCUPADO':op; if(ch)o.disabled=true; sel.appendChild(o); }
 }
-
-window.validarDia=()=>{
- let f=document.getElementById('fecha').value; if(!f) return;
- let dia=new Date(f+'T12:00:00').getDay(); let btn=document.getElementById('btn'); let aviso=document.getElementById('aviso');
- if(dia!==1&&dia!==2&&dia!==4){ aviso.innerHTML='❌ Solo LUN MAR JUE'; aviso.style.color='#ef4444'; btn.disabled=true; btn.style.opacity='0.3'; }
- else{ aviso.innerHTML='✅ '+(dia==1?'LUNES NOCHE':dia==2?'MARTES NOCHE':'JUEVES NOCHE')+' - Verificando lugares...'; aviso.style.color='#22c55e'; btn.disabled=false; btn.style.opacity='1'; cambiarHoras(); }
-}
-
+window.validarDia=()=>{ let f=document.getElementById('fecha').value; if(!f)return; let dia=new Date(f+'T12:00:00').getDay(); let b=document.getElementById('btn'), av=document.getElementById('aviso'); if(dia!=1&&dia!=2&&dia!=4){av.innerHTML='❌ Solo LUN MAR JUE'; b.disabled=true;} else{av.innerHTML='✅ '+(dia==1?'LUNES':dia==2?'MARTES':'JUEVES')+' NOCHE'; b.disabled=false; cambiarHoras();} }
 window.enviar=async()=>{
- let ap=document.getElementById('ap').value.toUpperCase().trim(); let no=document.getElementById('no').value.toUpperCase().trim();
- let dni=document.getElementById('dni').value.trim(); let tel=document.getElementById('tel').value.trim();
- let os=document.getElementById('os').value; let fecha=document.getElementById('fecha').value;
- let hora=document.getElementById('hora').value; let tipo=document.getElementById('tipo').value;
- let tieneOrden=document.getElementById('tieneOrden').value;
- if(!ap||!no||!dni||!fecha||!tel){alert('Falta apellido, nombre, DNI, WhatsApp o fecha');return;}
- if(tieneOrden=='SI'&&!ordenBase64){alert('Dijiste que tenés orden, subila o poné NO TENGO');return;}
- if(!hora){alert('Elegí bloque horario');return;}
+ let ap=document.getElementById('ap').value.toUpperCase().trim(), no=document.getElementById('no').value.toUpperCase().trim(), dni=document.getElementById('dni').value.trim(), tel=document.getElementById('tel').value.trim(), os=document.getElementById('os').value, fecha=document.getElementById('fecha').value, hora=document.getElementById('hora').value, tipo=document.getElementById('tipo').value, tiene=document.getElementById('tieneOrden').value;
+ if(!ap||!no||!dni||!fecha||!tel){alert('Faltan datos');return;} if(tiene=='SI'&&!ordenB64){alert('Subí orden');return;}
  document.getElementById('btn').innerHTML='Verificando...'; document.getElementById('btn').disabled=true;
-
- // VERIFICACION FINAL
- let q=query(collection(db,"pacientes_senda"), where("fecha","==",fecha));
- let snap=await getDocs(q); let existentes=[]; snap.forEach(s=>existentes.push(s.data()));
- let choque=hayChoque(hora, existentes);
- if(choque){ alert(`❌ Ese bloque ya está ocupado el ${fecha} ${hora} por ${choque.apellidos} ${choque.nombres} (${choque.tipo_estudio}). Elegí otro.`); document.getElementById('btn').innerHTML='Solicitar Pre-reserva'; document.getElementById('btn').disabled=false; cambiarHoras(); return; }
-
+ let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha)); let snap=await getDocs(q); let exs=[]; snap.forEach(s=>exs.push(s.data())); let ch=choque(hora,exs);
+ if(ch){ alert('❌ Ocupado por '+ch.apellidos); document.getElementById('btn').innerHTML='Solicitar'; document.getElementById('btn').disabled=false; cambiarHoras(); return; }
  try{
-  let d=new Date(fecha+'T12:00:00'); let noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES';
-  let estadoFinal=tieneOrden=='SI'?'PRE-RESERVA':'FALTA_ORDEN';
-  let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_base64:ordenBase64,tiene_orden:tieneOrden=='SI',estado:estadoFinal,origen:'WEB',creado:new Date().toISOString()};
+  let d=new Date(fecha+'T12:00:00'), noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES', diaNum=fecha.split('-')[2]+'/'+fecha.split('-')[1];
+  let estado=tiene=='SI'?'PRE-RESERVA':'FALTA_ORDEN';
+  let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_base64:ordenB64,tiene_orden:tiene=='SI',estado:estado,origen:'WEB',creado:new Date().toISOString(),papeles:{orden_foto:!!ordenB64,orden_original:false,autorizacion:false,pago:false,confirmado:false}};
   let docRef=await addDoc(collection(db,"pacientes_senda"),data);
-  let win=window.open('','','width=620,height=800');
-  win.document.write(`<html><head><meta charset="UTF-8"></head><body style="font-family:sans-serif;padding:12px;background:#0f172a;color:#fff"><div style="max-width:520px;margin:auto;background:#1e293b;padding:22px;border-radius:18px;border:1px solid #00f5d4"><h2 style="color:#00f5d4;text-align:center;margin:0">SENDA - OK</h2><p style="text-align:center;color:#ffd166">${estadoFinal=='FALTA_ORDEN'?'FALTA ORDEN - Traer el día':'Orden recibida ✅'}</p><hr style="border-color:#334155"><p><b style="color:#ffd166">Paciente:</b> ${ap} ${no} - DNI ${dni}</p><p><b style="color:#ffd166">Fecha:</b> ${noche} ${fecha} ${hora}</p><p><b style="color:#ffd166">Estudio:</b> ${tipo} - ${os}</p><p style="background:#0f172a;padding:10px;border-radius:8px;border:1px solid #334155;font-size:0.85rem">Traer DNI, orden (si no la subiste), pelo lavado sin crema. SENDA La Plata.</p><p style="font-size:0.7rem;color:#94a3b8">ID: ${docRef.id}</p><button onclick="window.print()" style="width:100%;padding:14px;background:#00f5d4;color:#000;font-weight:800;border:none;border-radius:10px;cursor:pointer">Imprimir / Guardar PDF</button></div></body></html>`);
-  alert('¡Guardado! Ese bloque ya quedó bloqueado.');
+  // COMPROBANTE IGUAL A TU FOTO
+  let w=window.open('','','width=750,height=900');
+  w.document.write(`<html><head><meta charset="UTF-8"><title>TURNO SENDA</title><style>@media print{.no-print{display:none}}</style></head><body style="font-family:Arial,sans-serif;background:#00b050;padding:10px">
+  <div style="max-width:680px;margin:auto;background:#fff;border:4px solid #000">
+  <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:2px solid #000"><div style="display:flex;gap:8px;align-items:center"><div style="width:40px;height:40px;background:#ff6600;border-radius:50%"></div><div style="font-weight:900;line-height:1">SENDA<br>COMUNIDAD</div></div><div style="font-weight:900;font-size:22px">TURNO</div></div>
+  <div style="text-align:center;font-weight:700;padding:6px;border-bottom:2px solid #000">TURNO PARA ESTUDIO NEUROLOGICO</div>
+  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700"><u>DIA:</u> ${noche} <span style="background:#000;color:#fff;padding:0 6px">${diaNum}</span> &nbsp; ${noche.toLowerCase()} a la noche - ${tipo}</div>
+  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700;text-align:center"><u>HORA:</u> <span style="background:#000;color:#fff;padding:0 8px">${hora.split('-')[0]}hs</span> - Paciente: ${ap} ${no}</div>
+  <div style="border:3px solid #000;margin:8px;padding:8px;font-size:20px;font-weight:700">LUGAR: 56 N° 1321 e/ 21 y 22 - ${os} - DNI ${dni}</div>
+  <div style="text-align:center;font-size:13px;padding:4px">En caso de no poder concurrir avisar con anticipacion para cambiar el turno</div>
+  <div style="border:2px solid #f00;margin:8px;padding:8px;text-align:center;font-size:14px"><b>El dia del estudio:</b><br>- el pelo lavado, pero seco, sin crema de enjuague ni otros productos<br>- sin esmalte de uñas<br>- privación de sueño suficiente como para dormir en el consultorio<br><b>- orden autorizada por obra social (IOMA NO REQUIERE AUTORIZACION)</b><br>${tiene=='NO'?'<b style="color:red">- FALTA ORDEN: traerla el dia del estudio</b>':''}</div>
+  <div style="padding:8px;font-size:13px;font-weight:700">EL INFORME SERA ENVIADO DENTRO DE LOS 10 A 15 DIAS, EN FORMATO PDF,<br>POR FAVOR IMPRIMIRLO POR SI SE BORRA DE LOS MENSAJES.<br><div style="text-align:right;font-size:20px">TEL: 2215983871</div><div style="font-size:11px">ID: ${docRef.id} - ${estado}</div></div>
+  </div><div style="text-align:center;margin-top:10px" class="no-print"><button onclick="window.print()" style="padding:14px 30px;font-weight:900;background:#000;color:#fff;border:none;cursor:pointer">IMPRIMIR</button></div></body></html>`);
   location.reload();
- }catch(e){alert('Error: '+e.message); document.getElementById('btn').innerHTML='Solicitar Pre-reserva'; document.getElementById('btn').disabled=false;}
+ }catch(e){alert(e.message); document.getElementById('btn').disabled=false;}
 }
 window.onload=()=>{cambiarHoras(); toggleOrden();};
 </script>
-<style>
-body{background:#0f172a;color:#fff;font-family:system-ui,sans-serif;padding:12px}
-.box{max-width:580px;margin:auto;background:#1e293b;padding:20px;border-radius:20px;border:1px solid #334155;box-shadow:0 0 40px #00f5d41a}
-input,select{width:100%;padding:12px;margin-top:4px;border-radius:10px;background:#0f172a;border:1px solid #334155;color:#fff;font-size:1rem}
-label{font-size:0.72rem;color:#ffd166;margin-top:12px;display:block;letter-spacing:0.6px;font-weight:700}
-button{cursor:pointer}
-h2{color:#00f5d4;text-align:center;margin:0}
-#aviso,#avisoOrden{min-height:18px;font-size:0.8rem;margin-top:4px}
-#boxOrden{background:#0f172a;border:1px dashed #334155;padding:10px;border-radius:12px;margin-top:6px}
-</style>
+<style>body{background:#0f172a;color:#fff;font-family:system-ui;padding:12px}.box{max-width:580px;margin:auto;background:#1e293b;padding:18px;border-radius:18px}input,select{width:100%;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #334155;color:#fff;margin-top:4px}label{font-size:0.7rem;color:#ffd166;margin-top:10px;display:block;font-weight:700}#boxOrden{background:#0f172a;border:1px dashed #334155;padding:10px;border-radius:10px;margin-top:6px}</style>
 </head>
-<body>
-<div class="box">
-<h2>SENDA - Solicitar Turno</h2>
-<p style="text-align:center;color:#94a3b8;font-size:0.8rem;margin:4px 0 10px">Solo noches de Lunes, Martes y Jueves</p>
-<label>Apellidos</label><input id="ap" placeholder="PEREZ">
-<label>Nombres</label><input id="no" placeholder="JUAN">
-<label>DNI</label><input id="dni" placeholder="12345678">
-<label>WhatsApp</label><input id="tel" placeholder="221...">
-<label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>OSDE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>IOMA</option><option>PAMI</option><option>OTRA</option></select>
-<label>¿Tenés la orden médica?</label>
-<select id="tieneOrden" onchange="toggleOrden()">
-<option value="SI">SI, TENGO ORDEN (la subo ahora)</option>
-<option value="NO">NO TENGO ORDEN TODAVÍA</option>
-</select>
-<div id="boxOrden">
-<label style="margin-top:4px">Foto de la Orden *</label>
-<input type="file" id="ordenFile" accept="image/*" capture="environment" onchange="leerOrden(this)">
-<div id="avisoOrden"></div>
-</div>
-<label>Tipo de estudio</label>
-<select id="tipo" onchange="cambiarHoras()">
-<option value="EEG">EEG - 21-22 / 22-23</option>
-<option value="PSG_BASAL">PSG Basal - 21-23 / 23-01 / 01-03 / 03-05</option>
-<option value="PSG_RESP" selected>PSG Respiratoria - 23-05 (6hs) Completa</option>
-</select>
-<label>Fecha</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso"></div>
-<label>Bloque horario</label><select id="hora"></select>
-<button id="btn" onclick="enviar()" style="width:100%;padding:15px;border-radius:12px;margin-top:16px;background:#00f5d4;color:#000;font-weight:900;font-size:1.05rem;border:none">Solicitar Pre-reserva</button>
-<p style="font-size:0.68rem;color:#64748b;text-align:center;margin-top:10px">El bloque que se ocupa se tacha automático para el próximo paciente.</p>
-</div>
-</body>
-</html>
+<body><div class="box">
+<h2 style="text-align:center;color:#00f5d4;margin:0">SENDA - Solicitar Turno</h2>
+<label>Apellidos</label><input id="ap"><label>Nombres</label><input id="no"><label>DNI</label><input id="dni"><label>WhatsApp</label><input id="tel">
+<label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select>
+<label>¿Tenés orden?</label><select id="tieneOrden" onchange="toggleOrden()"><option value="SI">SI, TENGO ORDEN</option><option value="NO">NO TENGO TODAVIA</option></select>
+<div id="boxOrden"><input type="file" accept="image/*" onchange="leerOrden(this)"><div id="avisoOrden" style="font-size:0.8rem;color:#00f5d4"></div></div>
+<label>Tipo</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG</option><option value="PSG_BASAL">PSG BASAL</option><option value="PSG_RESP" selected>PSG RESPIRATORIA (6hs)</option><option value="PSG_DIURNA">PSG DIURNA</option><option value="ICM_CORTO">ICM CORTO</option><option value="ICM_LARGO">ICM LARGO</option></select>
+<label>Fecha (Lun Mar Jue)</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso"></div>
+<label>Bloque</label><select id="hora"></select>
+<button id="btn" onclick="enviar()" style="width:100%;padding:14px;margin-top:14px;background:#00f5d4;color:#000;font-weight:900;border:none;border-radius:12px">Solicitar Turno</button>
+</div></body></html>
