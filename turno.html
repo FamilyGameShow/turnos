@@ -1,124 +1,100 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SENDA Admin v17 Ficha Colores</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENDA Turno v17 PRE-TURNO</title>
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {getFirestore,collection,getDocs,doc,updateDoc,query,orderBy} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
-let pacientes=[], idSel=null;
+
 const PRECIOS={'EEG':'$100.000','PSG_BASAL':'$250.000','PSG_LARGA':'$350.000'};
-const OS_INFO={'IOMA':'IOMA $15.000 dif - NO requiere autoriz si es 1ra','OSDE':'OSDE token nosotros - sin dif','OSPE':'OSPE autoriza paciente web','OSPE PMO':'OSPE PMO Inst Central Medicina','SWISS MEDICAL':'Swiss no requiere','GALENO':'Galeno autoriza afiliado','MEDICUS':'Medicus no requiere','OMINT':'Omint no requiere','PARTICULAR':'PARTICULAR','PAMI':'PAMI NO - PARTICULAR','OTRA':'OTRA'};
-window.cargar=async()=>{let s=await getDocs(query(collection(db,"pacientes_senda"),orderBy("fecha","desc")));pacientes=[];s.forEach(d=>pacientes.push({id:d.id,...d.data()}));render();};
-window.render=()=>{
- let f=document.getElementById('filtro').value.toUpperCase();
- let html='';
- for(let p of pacientes){
-  if(f &&!(p.apellidos?.includes(f)||p.nombres?.includes(f)||p.dni?.includes(f))) continue;
-  let col=p.estado=='PRE-TURNO'?'#f59e0b':p.estado=='CONFIRMADO'?'#22c55e':'#94a3b8';
-  let ex=p.extra||{};
-  html+=`<div style="background:#1e293b;border-left:7px solid ${col};border-radius:12px;padding:10px;margin:8px 0">
-  <b>${p.apellidos||''} ${p.nombres||''}</b> <span style="font-size:0.7rem;background:${col};color:#000;padding:2px 6px;border-radius:4px">${p.estado} ${p.tipo_estudio} ${p.fecha} ${p.hora}</span><br>
-  <span style="font-size:0.72rem;color:#cbd5e1">${p.obra_social||''} DNI ${p.dni||''} TEL ${p.telefono||''} | ${ex.diag||p.diagnostico||''}</span>
-  <div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap">
-   <button onclick="abrirFicha('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:9px 14px;border-radius:8px;font-weight:900">📋 FICHA COLORES</button>
-   <button onclick="confirmarFinal('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:9px 14px;border-radius:8px;font-weight:900">✓ CONFIRMAR + PDF + WA FINAL</button>
-  </div></div>`;
+const DUR={'EEG':1,'PSG_BASAL':2,'PSG_LARGA':6};
+const BLOQUES={'21:00-22:00':[21][22],'22:00-23:00':[22][23],'21:00-23:00':[21][23],'23:00-01:00':[23][25],'01:00-03:00':[25][27],'03:00-05:00':[27][29],'23:00-05:00':[23][29],'10:00-13:00':[10][13]};
+let ordenB64="";
+
+window.toggleOrden=()=>{
+ let t=document.getElementById('tieneOrden').value;
+ document.getElementById('boxOrden').style.display=t=='SI'?'block':'none';
+ document.getElementById('boxExtra').style.display=t=='NO'?'block':'none';
+}
+window.leerOrden=(i)=>{let f=i.files[0];if(!f)return;let r=new FileReader();r.onload=e=>{ordenB64=e.target.result;document.getElementById('avisoOrden').innerText='✅ Orden cargada'};r.readAsDataURL(f);}
+function choque(n,exs){let a=BLOQUES[n]||[0][0];for(let ex of exs){if(ex.estado=='CANCELADO')continue;let b=BLOQUES[ex.hora]||[0][0];if(a[0]<b[1]&&b[0]<a[1])return ex;}return null;}
+
+window.cambiarHoras=async()=>{
+ let t=document.getElementById('tipo').value;
+ let sel=document.getElementById('hora');
+ let ops=t=='EEG'?['21:00-22:00','22:00-23:00']:t=='PSG_BASAL'?['21:00-23:00','23:00-01:00','01:00-03:00','03:00-05:00']:['23:00-05:00'];
+ let fecha=document.getElementById('fecha').value;
+ let ocup=[];
+ if(fecha){try{let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha));let s=await getDocs(q);s.forEach(d=>ocup.push(d.data()));}catch(e){}}
+ sel.innerHTML='';
+ for(let op of ops){let ch=choque(op,ocup);let o=document.createElement('option');o.value=op;o.text=ch?op+' ❌ OCUPADO':op+' ✅';if(ch)o.disabled=true;sel.appendChild(o);}
+ // no mostramos precio final aun, solo estimado
+ document.getElementById('infoPrecio').innerHTML=`<div style="background:#0f172a;border:1px solid #334155;padding:10px;border-radius:10px;font-size:0.8rem;color:#94a3b8">Precio estimado ${PRECIOS[t]} (a confirmar según orden y obra social). Si es IOMA: $15.000 diferenciado.</div>`;
+}
+window.validarDia=()=>{let f=document.getElementById('fecha').value;if(!f)return;let dia=new Date(f+'T12:00:00').getDay();if(dia!=1&&dia!=2&&dia!=4){document.getElementById('aviso').innerText='❌ Solo Lunes, Martes, Jueves';document.getElementById('btn').disabled=true;}else{document.getElementById('aviso').innerText='✅ '+(dia==1?'LUNES':dia==2?'MARTES':'JUEVES');document.getElementById('btn').disabled=false;cambiarHoras();}}
+
+window.enviar=async()=>{
+ let ap=document.getElementById('ap').value.toUpperCase().trim(),no=document.getElementById('no').value.toUpperCase().trim(),dni=document.getElementById('dni').value.trim(),tel=document.getElementById('tel').value.trim(),os=document.getElementById('os').value,fecha=document.getElementById('fecha').value,hora=document.getElementById('hora').value,tipo=document.getElementById('tipo').value,tiene=document.getElementById('tieneOrden').value;
+ if(!ap||!no||!dni||!tel||!fecha){alert('Faltan datos básicos');return;}
+ let extra={};
+ if(tiene=='NO'){
+   extra.fnac=document.getElementById('fnac').value; extra.edad=document.getElementById('edad').value; extra.dom=document.getElementById('dom').value; extra.loc=document.getElementById('loc').value; extra.med=document.getElementById('med').value; extra.diag=document.getElementById('diag').value; extra.medic=document.getElementById('medic').value; extra.obs=document.getElementById('obs').value;
+   if(!extra.fnac||!extra.med||!extra.diag){alert('Si no tenés orden, completá fecha nacimiento, médico y diagnóstico');return;}
  }
- document.getElementById('lista').innerHTML=html;
+ if(tiene=='SI'&&!ordenB64){alert('Subí la foto de la orden');return;}
+ document.getElementById('btn').innerText='Enviando PRE-TURNO...'; document.getElementById('btn').disabled=true;
+ let q=query(collection(db,"pacientes_senda"),where("fecha","==",fecha));let snap=await getDocs(q);let exs=[];snap.forEach(s=>exs.push(s.data()));if(choque(hora,exs)){alert('Horario ocupado, elegí otro');document.getElementById('btn').disabled=false;return;}
+ try{
+  let d=new Date(fecha+'T12:00:00'),noche=d.getDay()==1?'LUNES':d.getDay()==2?'MARTES':'JUEVES';
+  let data={apellidos:ap,nombres:no,dni:dni,telefono:tel,obra_social:os,fecha:fecha,hora:hora,tipo_estudio:tipo,noche:noche,orden_base64:ordenB64,tiene_orden:tiene=='SI',estado:'PRE-TURNO',creado:new Date().toISOString(),extra:extra, costo_estimado:PRECIOS[tipo], duracion:DUR[tipo]};
+  await addDoc(collection(db,"pacientes_senda"),data);
+  document.getElementById('boxForm').innerHTML=`<div style="text-align:center;padding:20px"><div style="font-size:50px">✅</div><h2 style="color:#22c55e">PRE-TURNO RECIBIDO</h2><p>${ap} ${no}, recibimos tu solicitud para <b>${tipo}</b> el ${noche} ${fecha} ${hora}.</p><p style="background:#fff3cd;color:#000;padding:12px;border-radius:10px"><b>No te llegó PDF todavía.</b><br>Revisamos tu orden y diagnóstico y te confirmamos por WhatsApp en breve con el precio final y el comprobante para imprimir.</p><p style="font-size:0.8rem;color:#94a3b8">Si no tenés orden legible, te vamos a mandar la ficha para completar.</p><button onclick="location.reload()" style="margin-top:12px;padding:12px 20px;background:#00f5d4;border:none;border-radius:10px;font-weight:800">Volver</button></div>`;
+ }catch(e){alert(e.message);document.getElementById('btn').disabled=false;}
 }
-window.abrirFicha=(id)=>{
- idSel=id; let p=pacientes.find(x=>x.id==id); let ex=p.extra||{}; let t=p.tecnico||{}; let e=p.excel||{};
- document.getElementById('modal').style.display='flex';
- document.getElementById('f_ap').value=p.apellidos||''; document.getElementById('f_no').value=p.nombres||'';
- document.getElementById('f_est').value=p.tipo_estudio||''; document.getElementById('f_num').value=t.numero||e.n_estudio||'257';
- document.getElementById('f_fecha').value=p.fecha||''; document.getElementById('f_os').value=p.obra_social||'';
- document.getElementById('f_os_n').value=e.n_afil||''; document.getElementById('f_fnac').value=ex.fnac||p.fecha_nacimiento||'';
- document.getElementById('f_edad').value=ex.edad||p.edad||''; document.getElementById('f_tel').value=p.telefono||ex.tel||'';
- document.getElementById('f_dom').value=ex.dom||p.domicilio||''; document.getElementById('f_loc').value=ex.loc||p.localidad||'';
- document.getElementById('f_lugar').value=t.lugar||'SENDA'; document.getElementById('f_med').value=ex.med||p.medico_solicitante||'';
- document.getElementById('f_tec').value=t.nombre||'SEBASTIAN'; document.getElementById('f_diag').value=ex.diag||p.diagnostico||'';
- document.getElementById('f_medic').value=ex.medic||p.medicacion||''; document.getElementById('f_obs').value=ex.obs||t.observaciones||'';
- document.getElementById('f_dni').value=p.dni||''; document.getElementById('f_costo').value=p.costo||p.costo_estimado||PRECIOS[p.tipo_estudio]||'';
- document.getElementById('f_colab').value=t.colaboracion||'BUENA'; document.getElementById('f_hora').value=p.hora||'';
- document.getElementById('f_mont').value=t.montaje||'PROTOCOLO 3';
- document.getElementById('f_peso').value=t.peso||''; document.getElementById('f_talla').value=t.talla||'';
- document.getElementById('f_informa').value=t.informa||'FITO'; document.getElementById('f_gest').value=t.gest||'40SEM';
- document.getElementById('f_parto').value=t.parto||'NATURAL'; document.getElementById('f_pesonac').value=t.pesonac||'2,900KG';
- document.getElementById('f_tallanac').value=t.tallanac||''; document.getElementById('f_oxi').value=t.oxigeno||'';
- document.getElementById('f_mail').value=p.email||'';
- let chk=t.checks||{}; ['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO','MAIL'].forEach(k=>{let el=document.getElementById('chk_'+k); if(el) el.checked=!!chk[k];});
- document.getElementById('ordenImg').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:200px">`:'Sin orden';
-}
-window.guardarFicha=async()=>{
- let chk={}; ['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO','MAIL'].forEach(k=>{chk[k]=document.getElementById('chk_'+k)?.checked;});
- let data={
-  tipo_estudio:document.getElementById('f_est').value,
-  obra_social:document.getElementById('f_os').value,
-  costo:document.getElementById('f_costo').value,
-  fecha:document.getElementById('f_fecha').value,
-  hora:document.getElementById('f_hora').value,
-  excel:{n_estudio:document.getElementById('f_num').value},
-  tecnico:{numero:document.getElementById('f_num').value,lugar:document.getElementById('f_lugar').value,nombre:document.getElementById('f_tec').value,colaboracion:document.getElementById('f_colab').value,montaje:document.getElementById('f_mont').value,hora:document.getElementById('f_hora').value,peso:document.getElementById('f_peso').value,talla:document.getElementById('f_talla').value,informa:document.getElementById('f_informa').value,gest:document.getElementById('f_gest').value,parto:document.getElementById('f_parto').value,pesonac:document.getElementById('f_pesonac').value,tallanac:document.getElementById('f_tallanac').value,oxigeno:document.getElementById('f_oxi').value,checks:chk},
-  extra:{fnac:document.getElementById('f_fnac').value,edad:document.getElementById('f_edad').value,dom:document.getElementById('f_dom').value,loc:document.getElementById('f_loc').value,med:document.getElementById('f_med').value,diag:document.getElementById('f_diag').value,medic:document.getElementById('f_medic').value,obs:document.getElementById('f_obs').value}
- };
- await updateDoc(doc(db,"pacientes_senda",idSel),data);
- document.getElementById('modal').style.display='none'; cargar();
-}
-window.confirmarFinal=async(id)=>{
- let p=pacientes.find(x=>x.id==id);
- let costo=document.getElementById('f_costo')?.value || p.costo || PRECIOS[p.tipo_estudio]||'';
- let info=OS_INFO[p.obra_social]||'';
- if(p.obra_social=='PARTICULAR') info='PARTICULAR '+costo;
- let dia=p.fecha?.split('-')[2]+'/'+p.fecha?.split('-')[1];
- const {jsPDF}=window.jspdf; const doc=new jsPDF();
- doc.setFillColor(46,204,113);doc.rect(0,0,210,14,'F');doc.setFontSize(10);doc.setFont(undefined,'bold');doc.text('SENDA COMUNIDAD',10,9);doc.setFontSize(18);doc.text('TURNO CONFIRMADO',120,10);
- doc.setFontSize(12);doc.text(`TURNO ${p.tipo_estudio} - ${p.noche} ${dia} ${p.hora}`,10,22);
- doc.rect(10,26,190,14);doc.setFontSize(14);doc.text(`PACIENTE: ${p.apellidos} ${p.nombres} DNI ${p.dni}`,12,35);
- doc.rect(10,42,190,22);doc.setFontSize(11);doc.text(`LUGAR: 56 N 1321 e/21 y 22 - ${p.obra_social} ${info}`,12,48);doc.text(`TEL ${p.telefono} COSTO: ${costo}`,12,58);
- doc.setFontSize(9);doc.setDrawColor(255,0,0);doc.rect(10,68,190,30);doc.text('Indicaciones: pelo lavado seco sin crema, sin esmalte, privacion sueno, orden autorizada',12,74);doc.text(info,12,80);doc.text('Informe 10-15 dias PDF TEL 2215983871',12,90);
- doc.save(`TURNO_FINAL_${p.apellidos}_${dia.replace('/','-')}.pdf`);
- await updateDoc(doc(db,"pacientes_senda",id),{estado:'CONFIRMADO',costo:costo});
- let msg=`Hola ${p.nombres}! ✅ TURNO SENDA CONFIRMADO FINAL:\n\n📅 ${p.noche} ${dia} ${p.hora}\n📍 56 N°1321 e/21 y 22 La Plata\n🧠 ${p.tipo_estudio} - ${p.tecnico?.lugar||'SENDA'}\n🏥 ${p.obra_social} - ${info}\n💰 Costo FINAL: ${costo}\n\nTrae orden + DNI\nIndicaciones: pelo lavado seco, sin esmalte, privacion sueno\n\nTe adjunto comprobante PDF\nLink para reprogramar/cancelar: avisa por aca\n\nTEL 2215983871`;
- let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
- window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
- cargar();
-}
-window.onload=cargar;
+window.onload=()=>{cambiarHoras();toggleOrden();};
 </script>
-<style>
-body{background:#0f172a;color:#fff;font-family:Arial;padding:10px}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,0.93);display:none;overflow:auto;padding:6px;z-index:999}
-table{border-collapse:collapse;width:100%;font-size:11px} td{border:1px solid #000;padding:2px;height:22px}
-.ama{background:#ffff00;color:#000}.azul{background:#b3e5fc;color:#000}.verde{background:#d9f99d;color:#000}.nara{background:#ffe0b2;color:#000}.cel{background:#00e5ff;color:#000}
-input,select{width:100%;border:none;background:transparent;font-size:11px;font-weight:700}
-</style>
+<style>body{background:#0f172a;color:#fff;font-family:system-ui;padding:12px}.box{max-width:600px;margin:auto;background:#1e293b;padding:20px;border-radius:20px;border:1px solid #334155}input,select,textarea{width:100%;padding:12px;border-radius:10px;background:#0f172a;border:1px solid #334155;color:#fff;margin-top:4px;box-sizing:border-box}label{font-size:0.7rem;color:#ffd166;margin-top:12px;display:block;font-weight:800;letter-spacing:0.5px}.faq{background:#0f172a;border:1px solid #334155;padding:12px;border-radius:12px;margin-bottom:14px}</style>
 </head>
 <body>
-<h2 style="color:#00f5d4">SENDA Admin v17 - PRE-TURNO <input id="filtro" placeholder="Buscar apellido" oninput="render()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff;margin-left:10px"></h2>
-<div id="lista"></div>
+<div class="box" id="boxForm">
+<h2 style="text-align:center;color:#00f5d4;margin:0">SENDA - Pre Turno</h2>
+<p style="text-align:center;color:#94a3b8;font-size:0.7rem">56 N°1321 e/21 y 22 La Plata</p>
 
-<div id="modal"><div style="background:#fff;color:#000;max-width:1100px;margin:auto;border:3px solid #000;width:100%">
-<div style="display:flex;justify-content:space-between;background:#000;color:#fff;padding:8px"><b>FICHA COLORES SENDA - AMARILLO paciente / AZUL tecnico / VERDE auto</b><button onclick="document.getElementById('modal').style.display='none'" style="background:#ef4444;color:#fff;border:none;padding:6px 12px;border-radius:6px">X</button></div>
+<div class="faq">
+<button onclick="document.getElementById('faq').style.display=document.getElementById('faq').style.display=='none'?'block':'none'" style="background:#334155;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700;width:100%">❓ Preguntas y dudas - Ver antes de sacar turno</button>
+<div id="faq" style="display:none;margin-top:10px;font-size:0.8rem;color:#cbd5e1;line-height:1.4">
+<b>¿Qué estudio me pidieron?</b><br>
+- Si dice EEG, EEG prolongado, de sueño, de siesta → elegí <b>EEG (1 hora)</b><br>
+- Si dice PSG, polisomnografía diurna/nocturna, de siesta → elegí <b>PSG BASAL (2 horas)</b><br>
+- Si dice PSG con oximetría, toda la noche, insomnio → elegí <b>PSG LARGA (6 horas)</b><br>
+Nosotros revisamos y si hay que cambiar te avisamos. No te preocupes.<br><br>
+<b>¿Qué tengo que traer?</b> Pelo lavado seco sin crema, sin esmalte, dormir poco la noche anterior, orden y DNI.<br>
+<b>¿Cuándo tengo el informe?</b> 10-15 días en PDF.<br>
+<b>Precios particulares:</b> EEG $100.000, BASAL $250.000, LARGA $350.000. Obras sociales: la mayoría sin costo, IOMA $15.000 diferenciado.
+</div>
+</div>
 
-<table>
-<tr><td class="verde" style="width:70px">APELLIDOS:</td><td class="verde" colspan="2"><input id="f_ap"></td><td class="verde">NOMBRES:</td><td class="verde" colspan="2"><input id="f_no"></td><td>OTROS</td><td>SI</td><td>NO</td><td class="nara">POR SAHOS</td><td class="nara"></td></tr>
-<tr><td class="verde">ESTUDIO:</td><td class="verde"><select id="f_est"><option value="EEG">EEG 1hs $100.000</option><option value="PSG_BASAL">PSG BASAL 2hs $250.000</option><option value="PSG_LARGA">PSG LARGA 6hs $350.000</option></select></td><td class="azul">N°</td><td class="azul"><input id="f_num"></td><td class="verde">FECHA:</td><td class="verde"><input id="f_fecha" type="date"></td><td>URGENTE</td><td><input type="checkbox" id="chk_URGENTE"></td><td></td><td class="azul">PESO</td><td class="azul"><input id="f_peso"></td></tr>
-<tr><td class="verde">OBRA SOCIAL:</td><td class="ama"><select id="f_os"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>OSPE PMO</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select></td><td class="ama">N°</td><td class="ama"><input id="f_os_n"></td><td colspan="2" rowspan="2"><div id="ordenImg" style="font-size:10px"></div></td><td>EKG</td><td><input type="checkbox" id="chk_EKG"></td><td></td><td class="azul">TALLA</td><td class="azul"><input id="f_talla"></td></tr>
-<tr><td class="ama">FECH. NAC.</td><td class="ama"><input id="f_fnac" type="date"></td><td class="ama">EDAD:</td><td class="ama"><input id="f_edad"></td><td>F.A.</td><td><input type="checkbox" id="chk_FA"></td><td></td><td class="azul">INFORMA</td><td class="azul"><input id="f_informa"></td></tr>
-<tr><td class="ama">DOMICILIO</td><td class="ama"><input id="f_dom"></td><td class="ama">LOCALIDAD</td><td class="ama" colspan="3"><input id="f_loc"></td><td>OXIMETRIA</td><td><input type="checkbox" id="chk_OXIMETRIA"></td><td></td><td class="cel">BEBES/NIÑOS</td><td class="cel"></td></tr>
-<tr><td>LUGAR</td><td><select id="f_lugar"><option>SENDA</option><option>DOMICILIO</option><option>ESPAÑOL</option></select></td><td class="ama">MED. SOLICITANTE:</td><td class="ama" colspan="3"><input id="f_med"></td><td>EMG</td><td><input type="checkbox" id="chk_EMG"></td><td></td><td class="cel">EDAD GESTACIONAL</td><td class="cel"><input id="f_gest"></td></tr>
-<tr><td class="azul">TECNICO:</td><td class="azul"><input id="f_tec" value="SEBASTIAN"></td><td class="ama">DIAGNOSTICO:</td><td class="ama" colspan="3"><input id="f_diag"></td><td>EOG</td><td><input type="checkbox" id="chk_EOG"></td><td></td><td class="cel">PARTO?</td><td class="cel"><input id="f_parto"></td></tr>
-<tr><td class="ama">MEDICACION</td><td class="ama" colspan="5"><input id="f_medic"></td><td>TORAX</td><td><input type="checkbox" id="chk_TORAX"></td><td></td><td class="cel">PESO AL NACER</td><td class="cel"><input id="f_pesonac"></td></tr>
-<tr><td class="ama">OBSERVACION:</td><td class="ama" colspan="2"><input id="f_obs"></td><td class="verde">DNI:</td><td class="verde" colspan="2"><input id="f_dni"></td><td>ABDOMEN</td><td><input type="checkbox" id="chk_ABDOMEN"></td><td></td><td class="cel">TALLA</td><td class="cel"><input id="f_tallanac"></td></tr>
-<tr><td></td><td class="verde">COSTO:</td><td class="verde"><input id="f_costo"></td><td class="azul">COLABORACION:</td><td class="azul"><select id="f_colab"><option>BUENA</option><option>MALA</option></select></td><td class="azul"></td><td>RONQUIDOS</td><td><input type="checkbox" id="chk_RONQUIDOS"></td><td></td><td class="cel">OXIGENO</td><td class="cel"><input id="f_oxi"></td></tr>
-<tr><td class="azul">MONTAJE:</td><td class="azul"><select id="f_mont"><option>PROTOCOLO 3</option><option>HALO + PARASAJITAL</option><option>FRONTALES SABRI</option></select></td><td class="verde">HORA:</td><td class="verde"><input id="f_hora"></td><td class="azul"></td><td class="azul"></td><td>HIPERNEA</td><td><input type="checkbox" id="chk_HIPERNEA"></td><td></td><td class="cel">FOTO</td><td><input type="checkbox" id="chk_FOTO"></td></tr>
-<tr><td colspan="6"></td><td>MAIL</td><td><input type="checkbox" id="chk_MAIL"></td><td></td><td><input id="f_mail" placeholder="mail"></td><td>X</td></tr>
-</table>
-<button onclick="guardarFicha()" style="width:100%;padding:14px;background:#d9f99d;color:#000;font-weight:900;border:none;font-size:15px">💾 GUARDAR FICHA</button>
-</div></div>
+<label>Apellidos</label><input id="ap"><label>Nombres</label><input id="no"><label>DNI</label><input id="dni"><label>WhatsApp</label><input id="tel">
+<label>Obra Social</label><select id="os"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>OSPE PMO</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select>
+<label>Tipo de estudio (elegí el que más se parezca)</label><select id="tipo" onchange="cambiarHoras()"><option value="EEG">EEG (1 hora) - $100.000</option><option value="PSG_BASAL">PSG BASAL (2 horas) - $250.000</option><option value="PSG_LARGA" selected>PSG LARGA (6 horas) - $350.000</option></select>
+<div id="infoPrecio" style="margin-top:8px"></div>
+
+<label>¿Tenés orden médica?</label><select id="tieneOrden" onchange="toggleOrden()"><option value="SI">SI, LA SUBO AHORA</option><option value="NO">NO, CARGO MIS DATOS</option></select>
+<div id="boxOrden"><input type="file" accept="image/*" capture="environment" onchange="leerOrden(this)"><div id="avisoOrden" style="font-size:0.8rem;color:#00f5d4"></div></div>
+
+<div id="boxExtra" style="display:none;background:#0f172a;border:1px dashed #f59e0b;padding:12px;border-radius:12px;margin-top:10px">
+<p style="color:#f59e0b;font-weight:800;margin:0 0 8px 0">Completá tu ficha (obligatorio si no tenés orden):</p>
+<label>Fecha nacimiento</label><input type="date" id="fnac"><label>Edad</label><input id="edad"><label>Domicilio</label><input id="dom"><label>Localidad</label><input id="loc"><label>Médico solicitante</label><input id="med"><label>Diagnóstico / Por qué te piden el estudio</label><textarea id="diag" rows="2"></textarea><label>Medicación que toma</label><input id="medic"><label>Observaciones</label><textarea id="obs" rows="2"></textarea>
+<div style="font-size:0.7rem;color:#94a3b8;margin-top:6px">Esta es la ficha que vos me dijiste, queda guardada y bloqueada para vos después. Si querés pasámela y la hago igual a tu Excel.</div>
+</div>
+
+<label>Fecha (Lun Mar Jue)</label><input type="date" id="fecha" onchange="validarDia()"><div id="aviso" style="font-size:0.8rem"></div>
+<label>Hora</label><select id="hora"></select>
+
+<button id="btn" onclick="enviar()" style="width:100%;padding:14px;margin-top:16px;background:#00f5d4;color:#000;font-weight:900;border:none;border-radius:12px">Enviar Pre-Turno</button>
+</div>
 </body>
 </html>
