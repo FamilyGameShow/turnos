@@ -2,14 +2,13 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SENDA Admin v18.1 BORRAR + MOVER</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<title>SENDA Admin v18.2 Grilla Fix</title>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {getFirestore,collection,getDocs,doc,updateDoc,addDoc,deleteDoc,query,orderBy,where} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
-let pacientes=[], bloqueos=[], habilitados=[], idSel=null, expandido=null, diaBloqSel=null;
+let pacientes=[], bloqueos=[], habilitados=[], idSel=null, expandido=null;
 
 function colorFila(p){
  if(p.lugar=='DOMICILIO') return '#38bdf8';
@@ -18,157 +17,134 @@ function colorFila(p){
  if(p.tipo_estudio=='PSG_LARGA') return '#166534';
  return '#1e293b';
 }
-function colorTexto(bg){ return bg=='#166534'?'#fff':'#000'; }
-
 window.cargar=async()=>{
  let s=await getDocs(query(collection(db,"pacientes_senda"),orderBy("fecha","desc"))); pacientes=[]; s.forEach(d=>pacientes.push({id:d.id,...d.data()}));
- try{ let qb=await getDocs(collection(db,"bloqueos_senda")); bloqueos=[]; qb.forEach(d=>bloqueos.push({id:d.id,...d.data()})); }catch(e){}
- try{ let qh=await getDocs(collection(db,"habilitados_senda")); habilitados=[]; qh.forEach(d=>habilitados.push({id:d.id,...d.data()})); }catch(e){}
+ let qb=await getDocs(collection(db,"bloqueos_senda")); bloqueos=[]; qb.forEach(d=>bloqueos.push({id:d.id,...d.data()}));
+ let qh=await getDocs(collection(db,"habilitados_senda")); habilitados=[]; qh.forEach(d=>habilitados.push({id:d.id,...d.data()}));
  renderLista(); renderCalendario();
 }
 window.renderLista=()=>{
  let mes=document.getElementById('filtroMes').value; let f=document.getElementById('filtroTxt').value.toUpperCase();
  let lista=pacientes.filter(p=>{if(mes&&!p.fecha?.startsWith(mes))return false;if(f&&!(p.apellidos?.includes(f)||p.nombres?.includes(f)))return false;return true;});
- let mesMostrar=mes||new Date().toISOString().substring(0,7); let aMostrar=mes?lista.filter(p=>p.fecha?.startsWith(mesMostrar)):lista;
- aMostrar.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+ lista.sort((a,b)=>a.fecha.localeCompare(b.fecha));
  let html='',num=1;
- aMostrar.forEach(p=>{
-  let bg=colorFila(p); let txt=colorTexto(bg);
-  let pap=p.papeles||{}; let fichaOk=pap.orden_foto&&pap.autorizacion; let turnoOk=pap.confirmado; let infOk=pap.informe;
-  let finalStyle=fichaOk&&turnoOk&&infOk?`background:#dc2626;color:#fff;border:3px solid #000`:`background:${bg};color:${txt}`;
+ lista.forEach(p=>{
+  let bg=colorFila(p); let txt=bg=='#166534'?'#fff':'#000';
+  let pap=p.papeles||{}; let ok=pap.orden_foto&&pap.autorizacion&&pap.confirmado&&pap.informe;
+  let style=ok?`background:#dc2626;color:#fff`:`background:${bg};color:${txt}`;
   let isExp=expandido==p.id;
-  html+=`<div style="${finalStyle};border-radius:10px;padding:8px 12px;margin:6px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleExp('${p.id}')">
-   <div><b>${num}. ${p.apellidos} ${p.nombres}</b> <span style="font-size:0.7rem">- ${p.diagnostico||p.extra?.diag||''} [${p.tipo_estudio} ${p.lugar} ${p.fecha} ${p.hora} ${p.costo||''}]</span></div>
-   <div style="font-size:0.7rem">${fichaOk?'🟢':'🟡'}F ${turnoOk?'🟢':'🟡'}T ${infOk?'🟢':'⚪'}I</div>
-  </div>`;
+  html+=`<div style="${style};border-radius:10px;padding:8px 12px;margin:5px 0;display:flex;justify-content:space-between" onclick="toggleExp('${p.id}')"><div><b>${num}. ${p.apellidos} ${p.nombres}</b> ${p.fecha} ${p.hora} ${p.tipo_estudio}</div><div>${ok?'🔴 LISTO':''}</div></div>`;
   if(isExp){
-   html+=`<div style="background:#0f172a;border:1px solid #334155;padding:12px;border-radius:10px;margin:-4px 0 10px 0;color:#fff;font-size:0.78rem">
-    DNI ${p.dni} TEL ${p.telefono} OS ${p.obra_social}<br>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-     <button onclick="abrirFicha('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">📋 FICHA</button>
-     <button onclick="abrirConfirmar('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">✓ CONFIRMAR + WA</button>
-     <button onclick="moverPaciente('${p.id}')" style="background:#facc15;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">🔄 MOVER A OTRO DÍA</button>
-     <button onclick="enviarRecordatorio('${p.id}')" style="background:#334155;color:#fff;border:none;padding:9px 12px;border-radius:8px">⏰ Recordatorio</button>
-     <button onclick="borrarPaciente('${p.id}')" style="background:#ef4444;color:#fff;border:none;padding:9px 12px;border-radius:8px;font-weight:800">🗑️ BORRAR PACIENTE PRUEBA</button>
-    </div>
-   </div>`;
+   html+=`<div style="background:#0f172a;padding:10px;border-radius:10px;margin:-4px 0 10px;color:#fff"><div style="font-size:0.75rem">DNI ${p.dni} TEL ${p.telefono} OS ${p.obra_social}<br>${p.diagnostico||p.extra?.diag||''}</div>
+   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+    <button onclick="moverPaciente('${p.id}')" style="background:#facc15;color:#000;border:none;padding:8px 12px;border-radius:8px;font-weight:800">🔄 MOVER</button>
+    <button onclick="borrarPaciente('${p.id}')" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:800">🗑️ BORRAR PRUEBA</button>
+    <button onclick="abrirConfirmar('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:8px 12px;border-radius:8px;font-weight:800">✓ CONFIRMAR WA</button>
+   </div></div>`;
   }
   num++;
  });
- document.getElementById('lista').innerHTML=html||'Sin pacientes';
- document.getElementById('totalMes').innerText=`${aMostrar.length} estudios`;
+ document.getElementById('lista').innerHTML=html; document.getElementById('totalMes').innerText=lista.length;
 }
 window.toggleExp=(id)=>{expandido=expandido==id?null:id;renderLista();}
-
-window.borrarPaciente=async(id)=>{
- if(!confirm('¿Seguro borrar este paciente de prueba? No se puede recuperar')) return;
- await deleteDoc(doc(db,"pacientes_senda",id));
- cargar();
-}
+window.borrarPaciente=async(id)=>{if(!confirm('¿Borrar paciente prueba?'))return;await deleteDoc(doc(db,"pacientes_senda",id));cargar();}
 window.moverPaciente=async(id)=>{
- let nueva=prompt('Nueva fecha YYYY-MM-DD para mover este paciente (ej 2026-10-15):'); if(!nueva) return;
+ let nueva=prompt('Mover a fecha YYYY-MM-DD (puede ser MIERCOLES):'); if(!nueva) return;
  let p=pacientes.find(x=>x.id==id);
  await updateDoc(doc(db,"pacientes_senda",id),{fecha:nueva});
- let msg=`Hola ${p.nombres}! 🔄 Tu turno SENDA se movió al ${nueva} misma hora ${p.hora} por reprogramación. Por favor confirma: SI / CAMBIAR / CANCELAR. 56 N°1321 - 2215983871`;
+ let msg=`Hola ${p.nombres}! Tu turno SENDA del ${p.fecha} se pasó al ${nueva} ${p.hora} por reprogramación. Confirma SI / CAMBIAR / CANCELAR. 56 N°1321`;
  let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
  window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
  cargar();
 }
 
-// CALENDARIO CON MOVER MASIVO
+// GRILLA FIX
 window.renderCalendario=()=>{
- let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
+ let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">';
  let hoy=new Date();
  for(let i=0;i<45;i++){
   let d=new Date(); d.setDate(hoy.getDate()+i); let iso=d.toISOString().split('T')[0];
-  let bloq=bloqueos.find(b=>b.fecha==iso); let hab=habilitados.find(b=>b.fecha==iso);
+  let diaSem=d.getDay();
+  let bloq=bloqueos.find(b=>b.fecha==iso);
+  let hab=habilitados.find(b=>b.fecha==iso);
   let turnos=pacientes.filter(p=>p.fecha==iso&&p.estado!='CANCELADO');
-  let bg='#1e293b'; if(bloq) bg='#ef4444'; else if(hab) bg='#22c55e'; else if(turnos.length) bg='#f59e0b'; else if([0,1,2,4].includes(d.getDay())) bg='#334155';
-  html+=`<div style="background:${bg};padding:7px;border-radius:10px;text-align:center;font-size:0.68rem;color:${bg=='#facc15'?'#000':'#fff'}">
-   <div><b>${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</b></div>
-   <div style="font-size:0.6rem">${bloq?'BLOQUEADO '+bloq.motivo:hab?'HABILITADO EXTRA':turnos.map(t=>t.apellidos.substring(0,5)).join(',')||'Libre'}</div>
-   <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">
-    <button onclick="toggleBloq('${iso}')" style="font-size:0.6rem;padding:3px;border:none;border-radius:4px;background:${bloq?'#000':'#ef4444'};color:#fff">${bloq?'Desbloquear':'Bloquear'}</button>
-    <button onclick="toggleHab('${iso}')" style="font-size:0.6rem;padding:3px;border:none;border-radius:4px;background:${hab?'#000':'#22c55e'};color:${hab?'#fff':'#000'}">${hab?'Quitar habilitado':'Habilitar (ej MIE)'}</button>
-    ${turnos.length?`<button onclick="moverDiaCompleto('${iso}')" style="font-size:0.6rem;padding:3px;background:#facc15;border:none;border-radius:4px;color:#000">Mover ${turnos.length} a otro día</button>`:''}
-   </div>
+  let esNormal= [1,2,4,0].includes(diaSem); // LUN MAR JUE DOM son normales
+  let bg, label, btn1, btn2='';
+
+  if(bloq){
+    bg='#ef4444'; label=`⛔ BLOQUEADO: ${bloq.motivo}`;
+    btn1=`<button onclick="desbloquear('${bloq.id}','${iso}')" style="width:100%;margin-top:4px;padding:5px;background:#000;color:#fff;border:none;border-radius:6px;font-size:0.65rem">DESBLOQUEAR</button>`;
+  } else if(hab){
+    bg='#22c55e'; label=`✅ HABILITADO EXTRA`;
+    btn1=`<button onclick="quitarHab('${hab.id}')" style="width:100%;margin-top:4px;padding:5px;background:#000;color:#fff;border:none;border-radius:6px;font-size:0.65rem">QUITAR HABILITADO</button><button onclick="bloquearDia('${iso}')" style="width:100%;margin-top:2px;padding:5px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-size:0.65rem">BLOQUEAR</button>`;
+  } else if(!esNormal){
+    bg='#1e293b'; label=`CERRADO (MIE/VIE/SAB)`;
+    btn1=`<button onclick="habilitarDia('${iso}')" style="width:100%;margin-top:4px;padding:5px;background:#22c55e;color:#000;border:none;border-radius:6px;font-weight:800;font-size:0.65rem">HABILITAR ESTE MIE</button><button onclick="bloquearDia('${iso}')" style="width:100%;margin-top:2px;padding:5px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-size:0.6rem">BLOQUEAR</button>`;
+  } else {
+    bg= turnos.length? '#f59e0b' : '#334155'; label= turnos.length? `${turnos.length} turnos` : `LABORABLE`;
+    btn1=`<button onclick="bloquearDia('${iso}')" style="width:100%;margin-top:4px;padding:5px;background:#ef4444;color:#fff;border:none;border-radius:6px;font-size:0.65rem">BLOQUEAR</button>`;
+  }
+  if(turnos.length){
+    btn2=`<button onclick="moverDiaCompleto('${iso}')" style="width:100%;margin-top:4px;padding:6px;background:#facc15;color:#000;border:none;border-radius:6px;font-weight:800;font-size:0.65rem">MOVER ${turnos.length} PACIENTES A OTRO DIA</button>`;
+  }
+  html+=`<div style="background:${bg};padding:8px;border-radius:12px;text-align:center;color:#fff;font-size:0.7rem;border:1px solid #000">
+   <div><b>${['DOM','LUN','MAR','MIE','JUE','VIE','SAB'][diaSem]} ${d.getDate()}/${d.getMonth()+1}</b><br><span style="font-size:0.6rem">${iso}</span></div>
+   <div style="font-size:0.6rem;margin:4px 0">${label}<br>${turnos.map(t=>t.apellidos.substring(0,5)).join(',')}</div>
+   ${btn1}${btn2}
   </div>`;
  }
  html+='</div>';
- html+=`<div style="margin-top:12px;background:#1e293b;padding:12px;border-radius:12px"><b>Bloquear por vacaciones:</b><br><input id="bloqFecha" type="date" style="padding:8px"><input id="bloqMotivo" placeholder="Motivo: vacaciones, problema personal" style="padding:8px;margin-top:4px"><button onclick="guardarBloqueo()" style="padding:10px;background:#ef4444;border:none;border-radius:8px;color:#fff;width:100%;margin-top:6px;font-weight:800">Bloquear + mover pacientes automáticamente</button></div>`;
+ html+=`<div style="margin-top:14px;background:#1e293b;padding:14px;border-radius:12px"><b>Bloquear rango por vacaciones:</b><br><input id="bloqFecha" type="date" style="padding:8px;width:100%;margin-top:6px"><input id="bloqMotivo" placeholder="Motivo: vacaciones, problema personal, congreso" style="padding:8px;width:100%;margin-top:6px"><button onclick="guardarBloqueo()" style="padding:12px;background:#ef4444;border:none;border-radius:8px;color:#fff;width:100%;margin-top:8px;font-weight:900">1- BLOQUEAR DIA + 2- MOVER PACIENTES + 3- AVISAR WA</button></div>`;
  document.getElementById('calendario').innerHTML=html;
 }
-window.toggleBloq=async(iso)=>{
- let ex=bloqueos.find(b=>b.fecha==iso);
- if(ex){ if(!confirm('Desbloquear '+iso+'?')) return; await deleteDoc(doc(db,"bloqueos_senda",ex.id)); }
- else { let mot=prompt('Motivo bloqueo '+iso+'?','Vacaciones / problema personal'); if(!mot) return; await addDoc(collection(db,"bloqueos_senda"),{fecha:iso,motivo:mot}); diaBloqSel=iso; let mover=confirm('¿Querés mover los pacientes de ese día a otro día ahora?'); if(mover) moverDiaCompleto(iso); }
- cargar();
-}
-window.toggleHab=async(iso)=>{
- let ex=habilitados.find(b=>b.fecha==iso);
- if(ex){ await deleteDoc(doc(db,"habilitados_senda",ex.id)); }
- else { await addDoc(collection(db,"habilitados_senda"),{fecha:iso,nota:'Habilitado extra ej MIERCOLES'}); }
- cargar();
-}
+window.bloquearDia=async(iso)=>{let mot=prompt('Motivo bloqueo '+iso+'?','Vacaciones'); if(!mot) return; await addDoc(collection(db,"bloqueos_senda"),{fecha:iso,motivo:mot}); let turnos=pacientes.filter(p=>p.fecha==iso); if(turnos.length){ moverDiaCompleto(iso); } else { cargar(); }}
+window.desbloquear=async(id,iso)=>{await deleteDoc(doc(db,"bloqueos_senda",id)); cargar();}
+window.habilitarDia=async(iso)=>{await addDoc(collection(db,"habilitados_senda"),{fecha:iso}); cargar();}
+window.quitarHab=async(id)=>{await deleteDoc(doc(db,"habilitados_senda",id)); cargar();}
+
 window.moverDiaCompleto=async(iso)=>{
- let turnos=pacientes.filter(p=>p.fecha==iso);
- if(!turnos.length) return alert('No hay pacientes ese día');
- let nueva=prompt(`Mover ${turnos.length} pacientes del ${iso} a qué fecha? YYYY-MM-DD (ej 2026-10-15 MIERCOLES):`); if(!nueva) return;
- if(!confirm(`¿Mover ${turnos.length} pacientes de ${iso} a ${nueva} misma hora y avisar por WhatsApp que se canceló por reprogramación?`)) return;
+ let turnos=pacientes.filter(p=>p.fecha==iso); if(!turnos.length){ alert('No hay pacientes ese día para mover'); return; }
+ let nueva=prompt(`Hay ${turnos.length} pacientes el ${iso}. ¿A qué fecha los querés pasar? YYYY-MM-DD (puede ser MIERCOLES 2026-10-14):`); if(!nueva) return;
+ let motivo=bloqueos.find(b=>b.fecha==iso)?.motivo || prompt('Motivo para avisarle al paciente?','Vacaciones') || 'reprogramación';
+ if(!confirm(`Mover ${turnos.length} pacientes de ${iso} a ${nueva}?\nSe les va a mandar WhatsApp automático.`)) return;
  for(let p of turnos){
   await updateDoc(doc(db,"pacientes_senda",p.id),{fecha:nueva});
-  let msg=`Hola ${p.nombres}! 🔔 SENDA: Tu turno del ${iso} ${p.hora} se reprograma por problemas/vacaciones. Nuevo día: ${nueva} misma hora ${p.hora} en ${p.lugar}.\n\nConfirma por favor:\n✅ CONFIRMO ${nueva}\n🔄 CAMBIAR A OTRO DÍA\n❌ CANCELAR\n\nGracias! 56 N°1321 - 2215983871`;
+  let msg=`Hola ${p.nombres}! 🔔 SENDA: Tu turno del ${iso} ${p.hora} se reprogramó por ${motivo}.\nNuevo día: ${nueva} misma hora ${p.hora} en ${p.lugar}.\n\nConfirma:\n✅ CONFIRMO ${nueva}\n🔄 CAMBIAR FECHA\n❌ CANCELAR\n\nGracias! 56 N°1321 - 2215983871`;
   let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
   window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
-  await new Promise(r=>setTimeout(r,800));
+  await new Promise(r=>setTimeout(r,700));
  }
- alert(`Movidos ${turnos.length} pacientes a ${nueva}`); cargar();
+ cargar();
 }
 window.guardarBloqueo=async()=>{
- let f=document.getElementById('bloqFecha').value,m=document.getElementById('bloqMotivo').value; if(!f||!m) return alert('Falta fecha/motivo');
- await addDoc(collection(db,"bloqueos_senda"),{fecha:f,motivo:m}); moverDiaCompleto(f);
+ let f=document.getElementById('bloqFecha').value,m=document.getElementById('bloqMotivo').value; if(!f||!m) return alert('Falta fecha y motivo');
+ await addDoc(collection(db,"bloqueos_senda"),{fecha:f,motivo:m});
+ // esperar 500ms y mover
+ setTimeout(()=>{ moverDiaCompleto(f); },600);
 }
 
-// funciones ficha / confirmar / recordatorio (igual que antes pero resumidas)
-window.abrirFicha=async(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);document.getElementById('modalFicha').style.display='flex';document.getElementById('f_ap').value=p.apellidos||'';document.getElementById('f_no').value=p.nombres||'';document.getElementById('f_fecha').value=p.fecha||'';document.getElementById('f_os').value=p.obra_social||'';document.getElementById('ordenImg').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:200px">`:'Sin orden';}
-window.guardarFicha=async()=>{let data={apellidos:document.getElementById('f_ap').value.toUpperCase(),obra_social:document.getElementById('f_os').value,fecha:document.getElementById('f_fecha').value};await updateDoc(doc(db,"pacientes_senda",idSel),data);document.getElementById('modalFicha').style.display='none';cargar();}
 window.abrirConfirmar=(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);document.getElementById('modalConf').style.display='flex';document.getElementById('c_costo').value=p.costo||'';document.getElementById('c_fecha').value=p.fecha;document.getElementById('c_hora').value=p.hora;document.getElementById('c_est').value=p.tipo_estudio;}
 window.confirmarFinal=async()=>{
  let p=pacientes.find(x=>x.id==idSel); let costo=document.getElementById('c_costo').value, fecha=document.getElementById('c_fecha').value, hora=document.getElementById('c_hora').value, estudio=document.getElementById('c_est').value;
  await updateDoc(doc(db,"pacientes_senda",idSel),{costo,fecha,hora,tipo_estudio:estudio,'papeles.confirmado':true,estado:'CONFIRMADO'});
- let dia=fecha.split('-')[2]+'/'+fecha.split('-')[1];
- const {jsPDF}=window.jspdf; let dpdf=new jsPDF(); dpdf.text(`TURNO FINAL ${p.apellidos} ${estudio} ${fecha} ${hora} ${costo}`,10,10); dpdf.save(`TURNO_${p.apellidos}.pdf`);
- let msg=`Hola ${p.nombres}! ✅ TURNO SENDA CONFIRMADO FINAL\n📅 ${dia} ${hora}hs\n📍 ${p.lugar} 56 N°1321\n🧠 ${estudio}\n💰 FINAL: ${costo}\n\nConfirma: SI / CAMBIAR / CANCELAR\n2215983871`;
+ let msg=`Hola ${p.nombres}! ✅ TURNO SENDA CONFIRMADO FINAL ${fecha} ${hora} ${estudio} ${costo} en ${p.lugar} 56 N°1321. Confirma SI / CAMBIAR / CANCELAR. 2215983871`;
  let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
  window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
  document.getElementById('modalConf').style.display='none'; cargar();
 }
-window.enviarRecordatorio=(id)=>{let p=pacientes.find(x=>x.id==id);let msg=`Hola ${p.nombres}! ⏰ Recordatorio SENDA mañana ${p.fecha} ${p.hora} ${p.tipo_estudio} en ${p.lugar}. Trae orden+DNI, pelo lavado. 56 N°1321. Confirma por acá`;let tel=(p.telefono||'').replace(/\D/g,'');if(!tel.startsWith('54'))tel='54'+tel;window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');}
 window.onload=cargar;
 </script>
 <style>
 body{background:#0f172a;color:#fff;font-family:system-ui;padding:10px}
-#modalFicha,#modalConf{position:fixed;inset:0;background:rgba(0,0,0,0.9);display:none;overflow:auto;padding:10px;z-index:999}
+#modalConf{position:fixed;inset:0;background:rgba(0,0,0,0.9);display:none;overflow:auto;padding:10px;z-index:999}
 </style>
 </head>
 <body>
-<h2 style="color:#00f5d4;margin:0">SENDA Admin v18.1 - Colores fuertes + Borrar + Mover a MIERCOLES</h2>
-<div style="display:flex;gap:4px;margin:10px 0"><input id="filtroTxt" placeholder="Buscar apellido" oninput="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff;flex:1"><input id="filtroMes" type="month" onchange="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff"></div>
-<div style="display:flex;gap:6px;margin-bottom:10px">
-<button onclick="document.getElementById('pLista').style.display='block';document.getElementById('pCal').style.display='none'" style="padding:10px;background:#00f5d4;border:none;border-radius:8px;font-weight:800">📋 LISTA COLORES</button>
-<button onclick="document.getElementById('pLista').style.display='none';document.getElementById('pCal').style.display='block'" style="padding:10px;background:#334155;color:#fff;border:none;border-radius:8px">🗓️ GRILLA + BLOQUEOS + MIERCOLES</button>
-<span id="totalMes" style="font-size:0.8rem;margin-left:10px"></span>
-</div>
+<h2 style="color:#00f5d4;margin:0">SENDA Admin v18.2 - Grilla Fix MIERCOLES</h2>
+<div style="display:flex;gap:4px;margin:10px 0"><input id="filtroTxt" placeholder="Buscar" oninput="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff;flex:1"><input id="filtroMes" type="month" onchange="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff"></div>
+<div style="display:flex;gap:6px;margin-bottom:10px"><button onclick="document.getElementById('pLista').style.display='block';document.getElementById('pCal').style.display='none'" style="padding:10px;background:#00f5d4;border:none;border-radius:8px;font-weight:800">📋 LISTA + BORRAR</button><button onclick="document.getElementById('pLista').style.display='none';document.getElementById('pCal').style.display='block'" style="padding:10px;background:#334155;color:#fff;border:none;border-radius:8px">🗓️ GRILLA MOVER A MIERCOLES</button><span id="totalMes"></span></div>
 <div id="pLista"><div id="lista"></div></div>
-<div id="pCal" style="display:none"><div id="calendario"></div>
-<div style="margin-top:12px;background:#1e293b;padding:10px;border-radius:10px;font-size:0.75rem">
-<b>Cómo pasar un MIÉRCOLES:</b> En la grilla buscá el miércoles que querés, tocá "Habilitar (ej MIE)" y queda verde. Después podés mover pacientes ahí con "Mover a otro día".<br>
-<b>Cómo bloquear por vacaciones:</b> Tocá "Bloquear" o usa el formulario de abajo. Te pregunta a qué fecha moverlos y les manda WhatsApp automático con motivo.<br>
-<b>Borrar pruebas:</b> Desplegá la fila y tocá 🗑️ BORRAR.
-</div>
-</div>
-
-<div id="modalFicha"><div style="background:#fff;color:#000;max-width:600px;margin:auto;padding:12px"><h3>Ficha rápida</h3><input id="f_ap" placeholder="Apellido"><input id="f_no" placeholder="Nombre" style="margin-top:4px"><input id="f_fecha" type="date" style="margin-top:4px"><input id="f_os" style="margin-top:4px"><div id="ordenImg" style="margin-top:6px"></div><button onclick="guardarFicha()" style="width:100%;padding:12px;background:#d9f99d;border:none;margin-top:8px;font-weight:800">Guardar</button><button onclick="document.getElementById('modalFicha').style.display='none'" style="width:100%;margin-top:4px">Cerrar</button></div></div>
-<div id="modalConf"><div style="background:#fff;color:#000;max-width:480px;margin:auto;padding:12px"><h3>Confirmar final</h3><select id="c_est"><option value="EEG">EEG</option><option value="PSG_BASAL">PSG BASAL 2hs</option><option value="PSG_LARGA">PSG LARGA 6hs</option></select><input id="c_fecha" type="date" style="margin-top:4px"><input id="c_hora" style="margin-top:4px"><input id="c_costo" placeholder="Costo final" style="margin-top:4px"><button onclick="confirmarFinal()" style="width:100%;padding:12px;background:#22c55e;border:none;margin-top:8px;font-weight:800">Confirmar + WA</button><button onclick="document.getElementById('modalConf').style.display='none'" style="width:100%;margin-top:4px">Cerrar</button></div></div>
+<div id="pCal" style="display:none"><div id="calendario"></div></div>
+<div id="modalConf"><div style="background:#fff;color:#000;max-width:480px;margin:auto;padding:12px;border-radius:12px"><h3>Confirmar final</h3><select id="c_est"><option value="EEG">EEG</option><option value="PSG_BASAL">BASAL</option><option value="PSG_LARGA">LARGA</option></select><input id="c_fecha" type="date" style="margin-top:4px;width:100%"><input id="c_hora" style="margin-top:4px;width:100%"><input id="c_costo" style="margin-top:4px;width:100%"><button onclick="confirmarFinal()" style="width:100%;padding:12px;background:#22c55e;border:none;margin-top:8px;font-weight:800">Confirmar + WA</button><button onclick="document.getElementById('modalConf').style.display='none'" style="width:100%;margin-top:4px">Cerrar</button></div></div>
 </body>
 </html>
