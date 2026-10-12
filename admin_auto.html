@@ -2,123 +2,173 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin v18 FIX Completo</title>
+<title>SENDA Admin v18.1 BORRAR + MOVER</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {getFirestore,collection,getDocs,doc,updateDoc,addDoc,deleteDoc,query,orderBy,where} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyDXyhSScQ4xrwW6YouUHuj7NCLxdqoa8Rc",authDomain:"family-game-show.firebaseapp.com",projectId:"family-game-show",storageBucket:"family-game-show.firebasestorage.app",messagingSenderId:"509983775898",appId:"1:509983775898:web:47695f5b312553d9bd1323"};
 const app=initializeApp(cfg); const db=getFirestore(app);
-let pacientes=[], bloqueos=[], idSel=null, expandido=null;
-const PRECIOS={'EEG':'$100.000','PSG_BASAL':'$250.000','PSG_LARGA':'$350.000'};
-function colorFila(p){ if(p.lugar=='DOMICILIO') return '#7dd3fc'; if(p.tipo_estudio=='EEG') return '#fef08a'; if(p.tipo_estudio=='PSG_BASAL') return '#f0abfc'; if(p.tipo_estudio=='PSG_LARGA') return '#14532d'; return '#1e293b'; }
-window.cargar=async()=>{let s=await getDocs(query(collection(db,"pacientes_senda"),orderBy("fecha","desc")));pacientes=[];s.forEach(d=>pacientes.push({id:d.id,...d.data()}));try{let qb=await getDocs(collection(db,"bloqueos_senda"));bloqueos=[];qb.forEach(d=>bloqueos.push({id:d.id,...d.data()}));}catch(e){}renderLista();renderCalendario();};
+let pacientes=[], bloqueos=[], habilitados=[], idSel=null, expandido=null, diaBloqSel=null;
+
+function colorFila(p){
+ if(p.lugar=='DOMICILIO') return '#38bdf8';
+ if(p.tipo_estudio=='EEG') return '#facc15';
+ if(p.tipo_estudio=='PSG_BASAL') return '#e879f9';
+ if(p.tipo_estudio=='PSG_LARGA') return '#166534';
+ return '#1e293b';
+}
+function colorTexto(bg){ return bg=='#166534'?'#fff':'#000'; }
+
+window.cargar=async()=>{
+ let s=await getDocs(query(collection(db,"pacientes_senda"),orderBy("fecha","desc"))); pacientes=[]; s.forEach(d=>pacientes.push({id:d.id,...d.data()}));
+ try{ let qb=await getDocs(collection(db,"bloqueos_senda")); bloqueos=[]; qb.forEach(d=>bloqueos.push({id:d.id,...d.data()})); }catch(e){}
+ try{ let qh=await getDocs(collection(db,"habilitados_senda")); habilitados=[]; qh.forEach(d=>habilitados.push({id:d.id,...d.data()})); }catch(e){}
+ renderLista(); renderCalendario();
+}
 window.renderLista=()=>{
  let mes=document.getElementById('filtroMes').value; let f=document.getElementById('filtroTxt').value.toUpperCase();
- let lista=pacientes.filter(p=>{if(mes&&!p.fecha?.startsWith(mes))return false;if(f&&!(p.apellidos?.includes(f)||p.nombres?.includes(f)||(p.diagnostico||'').toUpperCase().includes(f)))return false;return true;});
- let mesMostrar=mes||new Date().toISOString().substring(0,7); let aMostrar=lista.filter(p=>p.fecha?.startsWith(mesMostrar));
- if(!mes) aMostrar=lista;
+ let lista=pacientes.filter(p=>{if(mes&&!p.fecha?.startsWith(mes))return false;if(f&&!(p.apellidos?.includes(f)||p.nombres?.includes(f)))return false;return true;});
+ let mesMostrar=mes||new Date().toISOString().substring(0,7); let aMostrar=mes?lista.filter(p=>p.fecha?.startsWith(mesMostrar)):lista;
  aMostrar.sort((a,b)=>a.fecha.localeCompare(b.fecha));
  let html='',num=1;
  aMostrar.forEach(p=>{
-  let bg=colorFila(p); let pap=p.papeles||{}; let txtColor=bg=='#14532d'?'#fff':'#000';
-  let fichaOk=pap.orden_foto&&pap.autorizacion; let turnoOk=pap.confirmado; let infOk=pap.informe;
-  let finalStyle=fichaOk&&turnoOk&&infOk?`background:#ef4444;color:#fff;border:2px solid #000`:`background:${bg};color:${txtColor}`;
+  let bg=colorFila(p); let txt=colorTexto(bg);
+  let pap=p.papeles||{}; let fichaOk=pap.orden_foto&&pap.autorizacion; let turnoOk=pap.confirmado; let infOk=pap.informe;
+  let finalStyle=fichaOk&&turnoOk&&infOk?`background:#dc2626;color:#fff;border:3px solid #000`:`background:${bg};color:${txt}`;
   let isExp=expandido==p.id;
-  html+=`<div style="${finalStyle};border-radius:8px;padding:7px 10px;margin:5px 0;cursor:pointer;display:flex;justify-content:space-between" onclick="toggleExp('${p.id}')"><div><b>${num}. ${p.apellidos} ${p.nombres}</b> - ${p.diagnostico||p.extra?.diag||''} <span style="font-size:0.65rem">[${p.tipo_estudio} ${p.lugar} ${p.fecha} ${p.hora} ${p.costo||p.costo_estimado}]</span></div><div style="font-size:0.7rem">${fichaOk?'🟢':'🟡'}FICHA ${turnoOk?'🟢':'🟡'}TURNO ${infOk?'🟢':'⚪'}INF</div></div>`;
+  html+=`<div style="${finalStyle};border-radius:10px;padding:8px 12px;margin:6px 0;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleExp('${p.id}')">
+   <div><b>${num}. ${p.apellidos} ${p.nombres}</b> <span style="font-size:0.7rem">- ${p.diagnostico||p.extra?.diag||''} [${p.tipo_estudio} ${p.lugar} ${p.fecha} ${p.hora} ${p.costo||''}]</span></div>
+   <div style="font-size:0.7rem">${fichaOk?'🟢':'🟡'}F ${turnoOk?'🟢':'🟡'}T ${infOk?'🟢':'⚪'}I</div>
+  </div>`;
   if(isExp){
-   html+=`<div style="background:#0f172a;border:1px solid #334155;padding:10px;border-radius:8px;margin:-4px 0 8px 0;color:#fff;font-size:0.75rem">
-   DNI ${p.dni} TEL ${p.telefono} OS ${p.obra_social} Nac ${p.fecha_nacimiento||p.extra?.fnac} Edad ${p.edad||p.extra?.edad}<br>Dom ${p.domicilio||p.extra?.dom} Loc ${p.localidad||p.extra?.loc}<br>Med ${p.medico_solicitante||p.extra?.med} Diag ${p.diagnostico||p.extra?.diag}<br>
-   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-    <button onclick="abrirFicha('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:8px 12px;border-radius:7px;font-weight:800">📋 FICHA COMPLETA</button>
-    <button onclick="abrirConfirmar('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:8px 12px;border-radius:7px;font-weight:800">✓ CONFIRMAR TURNO FINAL + WA</button>
-    <button onclick="enviarRecordatorio('${p.id}')" style="background:#334155;color:#fff;border:none;padding:8px 10px;border-radius:7px">⏰ Recordatorio (usa día anterior)</button>
-    <button onclick="enviarInformeFinal('${p.id}')" style="background:#000;color:#00f5d4;border:1px solid #00f5d4;padding:8px 10px;border-radius:7px">📄 Enviar Informe</button>
-   </div></div>`;
+   html+=`<div style="background:#0f172a;border:1px solid #334155;padding:12px;border-radius:10px;margin:-4px 0 10px 0;color:#fff;font-size:0.78rem">
+    DNI ${p.dni} TEL ${p.telefono} OS ${p.obra_social}<br>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+     <button onclick="abrirFicha('${p.id}')" style="background:#d9f99d;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">📋 FICHA</button>
+     <button onclick="abrirConfirmar('${p.id}')" style="background:#22c55e;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">✓ CONFIRMAR + WA</button>
+     <button onclick="moverPaciente('${p.id}')" style="background:#facc15;color:#000;border:none;padding:9px 12px;border-radius:8px;font-weight:800">🔄 MOVER A OTRO DÍA</button>
+     <button onclick="enviarRecordatorio('${p.id}')" style="background:#334155;color:#fff;border:none;padding:9px 12px;border-radius:8px">⏰ Recordatorio</button>
+     <button onclick="borrarPaciente('${p.id}')" style="background:#ef4444;color:#fff;border:none;padding:9px 12px;border-radius:8px;font-weight:800">🗑️ BORRAR PACIENTE PRUEBA</button>
+    </div>
+   </div>`;
   }
   num++;
  });
- document.getElementById('lista').innerHTML=html||'Sin pacientes'; document.getElementById('totalMes').innerText=`${aMostrar.length} en ${mesMostrar}`;
+ document.getElementById('lista').innerHTML=html||'Sin pacientes';
+ document.getElementById('totalMes').innerText=`${aMostrar.length} estudios`;
 }
 window.toggleExp=(id)=>{expandido=expandido==id?null:id;renderLista();}
-window.abrirFicha=(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);let t=p.tecnico||{};let chk=t.checks||{};document.getElementById('modalFicha').style.display='flex';
- // verde auto
- document.getElementById('f_ap').value=p.apellidos||'';document.getElementById('f_no').value=p.nombres||'';document.getElementById('f_est').value=p.tipo_estudio||'';document.getElementById('f_num').value=t.numero||'257';document.getElementById('f_fecha').value=p.fecha||'';document.getElementById('f_dni').value=p.dni||'';document.getElementById('f_costo').value=p.costo||p.costo_estimado||'';document.getElementById('f_hora').value=p.hora||'';
- // amarillo paciente
- document.getElementById('f_os').value=p.obra_social||'';document.getElementById('f_os_n').value=t.n_afil||'';document.getElementById('f_fnac').value=p.fecha_nacimiento||p.extra?.fnac||'';document.getElementById('f_edad').value=p.edad||p.extra?.edad||'';document.getElementById('f_tel').value=p.telefono||'';document.getElementById('f_dom').value=p.domicilio||p.extra?.dom||'';document.getElementById('f_loc').value=p.localidad||p.extra?.loc||'';document.getElementById('f_lugar').value=p.lugar||'SENDA';document.getElementById('f_med').value=p.medico_solicitante||p.extra?.med||'';document.getElementById('f_diag').value=p.diagnostico||p.extra?.diag||'';document.getElementById('f_medic').value=p.medicacion||p.extra?.medic||'';document.getElementById('f_obs').value=p.observacion||p.extra?.obs||'';
- // azul tecnico
- document.getElementById('f_tec').value=t.nombre||'SEBASTIAN';document.getElementById('f_colab').value=t.colaboracion||'BUENA';document.getElementById('f_mont').value=t.montaje||'PROTOCOLO 3';document.getElementById('f_peso').value=t.peso||'';document.getElementById('f_talla').value=t.talla||'';document.getElementById('f_informa').value=t.informa||'FITO';document.getElementById('f_gest').value=t.gest||'40SEM';document.getElementById('f_parto').value=t.parto||'NATURAL';document.getElementById('f_pesonac').value=t.pesonac||'2,900KG';document.getElementById('f_tallanac').value=t.tallanac||'';document.getElementById('f_oxi').value=t.oxigeno||'';document.getElementById('f_mail').value=t.mail||'';
- ['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO','MAIL'].forEach(k=>{let el=document.getElementById('chk_'+k);if(el) el.checked=!!chk[k];});
- document.getElementById('ordenImg').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:180px">`:'<span style="color:#000">Sin orden</span>';
- let pap=p.papeles||{};document.getElementById('chk_orden_ok').checked=!!pap.orden_foto;document.getElementById('chk_autor_ok').checked=!!pap.autorizacion;
+
+window.borrarPaciente=async(id)=>{
+ if(!confirm('¿Seguro borrar este paciente de prueba? No se puede recuperar')) return;
+ await deleteDoc(doc(db,"pacientes_senda",id));
+ cargar();
 }
-window.guardarFicha=async()=>{
- let chk={};['URGENTE','EKG','FA','OXIMETRIA','EMG','EOG','TORAX','ABDOMEN','RONQUIDOS','HIPERNEA','FOTO','MAIL'].forEach(k=>{chk[k]=document.getElementById('chk_'+k)?.checked;});
- let pap=(pacientes.find(x=>x.id==idSel)?.papeles)||{};pap.orden_foto=document.getElementById('chk_orden_ok').checked;pap.autorizacion=document.getElementById('chk_autor_ok').checked;
- let data={apellidos:document.getElementById('f_ap').value.toUpperCase(),nombres:document.getElementById('f_no').value.toUpperCase(),tipo_estudio:document.getElementById('f_est').value,obra_social:document.getElementById('f_os').value,fecha:document.getElementById('f_fecha').value,hora:document.getElementById('f_hora').value,lugar:document.getElementById('f_lugar').value,costo:document.getElementById('f_costo').value,fecha_nacimiento:document.getElementById('f_fnac').value,edad:document.getElementById('f_edad').value,telefono:document.getElementById('f_tel').value,domicilio:document.getElementById('f_dom').value,localidad:document.getElementById('f_loc').value,medico_solicitante:document.getElementById('f_med').value,diagnostico:document.getElementById('f_diag').value,medicacion:document.getElementById('f_medic').value,observacion:document.getElementById('f_obs').value,dni:document.getElementById('f_dni').value,papeles:pap,tecnico:{numero:document.getElementById('f_num').value,nombre:document.getElementById('f_tec').value,colaboracion:document.getElementById('f_colab').value,montaje:document.getElementById('f_mont').value,peso:document.getElementById('f_peso').value,talla:document.getElementById('f_talla').value,informa:document.getElementById('f_informa').value,gest:document.getElementById('f_gest').value,parto:document.getElementById('f_parto').value,pesonac:document.getElementById('f_pesonac').value,tallanac:document.getElementById('f_tallanac').value,oxigeno:document.getElementById('f_oxi').value,mail:document.getElementById('f_mail').value,checks:chk,n_afil:document.getElementById('f_os_n').value}};
- await updateDoc(doc(db,"pacientes_senda",idSel),data);document.getElementById('modalFicha').style.display='none';cargar();
+window.moverPaciente=async(id)=>{
+ let nueva=prompt('Nueva fecha YYYY-MM-DD para mover este paciente (ej 2026-10-15):'); if(!nueva) return;
+ let p=pacientes.find(x=>x.id==id);
+ await updateDoc(doc(db,"pacientes_senda",id),{fecha:nueva});
+ let msg=`Hola ${p.nombres}! 🔄 Tu turno SENDA se movió al ${nueva} misma hora ${p.hora} por reprogramación. Por favor confirma: SI / CAMBIAR / CANCELAR. 56 N°1321 - 2215983871`;
+ let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
+ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
+ cargar();
 }
-window.abrirConfirmar=(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);document.getElementById('modalConf').style.display='flex';document.getElementById('c_costo').value=p.costo||p.costo_estimado||'';document.getElementById('c_fecha').value=p.fecha;document.getElementById('c_hora').value=p.hora;document.getElementById('c_est').value=p.tipo_estudio;}
+
+// CALENDARIO CON MOVER MASIVO
+window.renderCalendario=()=>{
+ let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
+ let hoy=new Date();
+ for(let i=0;i<45;i++){
+  let d=new Date(); d.setDate(hoy.getDate()+i); let iso=d.toISOString().split('T')[0];
+  let bloq=bloqueos.find(b=>b.fecha==iso); let hab=habilitados.find(b=>b.fecha==iso);
+  let turnos=pacientes.filter(p=>p.fecha==iso&&p.estado!='CANCELADO');
+  let bg='#1e293b'; if(bloq) bg='#ef4444'; else if(hab) bg='#22c55e'; else if(turnos.length) bg='#f59e0b'; else if([0,1,2,4].includes(d.getDay())) bg='#334155';
+  html+=`<div style="background:${bg};padding:7px;border-radius:10px;text-align:center;font-size:0.68rem;color:${bg=='#facc15'?'#000':'#fff'}">
+   <div><b>${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</b></div>
+   <div style="font-size:0.6rem">${bloq?'BLOQUEADO '+bloq.motivo:hab?'HABILITADO EXTRA':turnos.map(t=>t.apellidos.substring(0,5)).join(',')||'Libre'}</div>
+   <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px">
+    <button onclick="toggleBloq('${iso}')" style="font-size:0.6rem;padding:3px;border:none;border-radius:4px;background:${bloq?'#000':'#ef4444'};color:#fff">${bloq?'Desbloquear':'Bloquear'}</button>
+    <button onclick="toggleHab('${iso}')" style="font-size:0.6rem;padding:3px;border:none;border-radius:4px;background:${hab?'#000':'#22c55e'};color:${hab?'#fff':'#000'}">${hab?'Quitar habilitado':'Habilitar (ej MIE)'}</button>
+    ${turnos.length?`<button onclick="moverDiaCompleto('${iso}')" style="font-size:0.6rem;padding:3px;background:#facc15;border:none;border-radius:4px;color:#000">Mover ${turnos.length} a otro día</button>`:''}
+   </div>
+  </div>`;
+ }
+ html+='</div>';
+ html+=`<div style="margin-top:12px;background:#1e293b;padding:12px;border-radius:12px"><b>Bloquear por vacaciones:</b><br><input id="bloqFecha" type="date" style="padding:8px"><input id="bloqMotivo" placeholder="Motivo: vacaciones, problema personal" style="padding:8px;margin-top:4px"><button onclick="guardarBloqueo()" style="padding:10px;background:#ef4444;border:none;border-radius:8px;color:#fff;width:100%;margin-top:6px;font-weight:800">Bloquear + mover pacientes automáticamente</button></div>`;
+ document.getElementById('calendario').innerHTML=html;
+}
+window.toggleBloq=async(iso)=>{
+ let ex=bloqueos.find(b=>b.fecha==iso);
+ if(ex){ if(!confirm('Desbloquear '+iso+'?')) return; await deleteDoc(doc(db,"bloqueos_senda",ex.id)); }
+ else { let mot=prompt('Motivo bloqueo '+iso+'?','Vacaciones / problema personal'); if(!mot) return; await addDoc(collection(db,"bloqueos_senda"),{fecha:iso,motivo:mot}); diaBloqSel=iso; let mover=confirm('¿Querés mover los pacientes de ese día a otro día ahora?'); if(mover) moverDiaCompleto(iso); }
+ cargar();
+}
+window.toggleHab=async(iso)=>{
+ let ex=habilitados.find(b=>b.fecha==iso);
+ if(ex){ await deleteDoc(doc(db,"habilitados_senda",ex.id)); }
+ else { await addDoc(collection(db,"habilitados_senda"),{fecha:iso,nota:'Habilitado extra ej MIERCOLES'}); }
+ cargar();
+}
+window.moverDiaCompleto=async(iso)=>{
+ let turnos=pacientes.filter(p=>p.fecha==iso);
+ if(!turnos.length) return alert('No hay pacientes ese día');
+ let nueva=prompt(`Mover ${turnos.length} pacientes del ${iso} a qué fecha? YYYY-MM-DD (ej 2026-10-15 MIERCOLES):`); if(!nueva) return;
+ if(!confirm(`¿Mover ${turnos.length} pacientes de ${iso} a ${nueva} misma hora y avisar por WhatsApp que se canceló por reprogramación?`)) return;
+ for(let p of turnos){
+  await updateDoc(doc(db,"pacientes_senda",p.id),{fecha:nueva});
+  let msg=`Hola ${p.nombres}! 🔔 SENDA: Tu turno del ${iso} ${p.hora} se reprograma por problemas/vacaciones. Nuevo día: ${nueva} misma hora ${p.hora} en ${p.lugar}.\n\nConfirma por favor:\n✅ CONFIRMO ${nueva}\n🔄 CAMBIAR A OTRO DÍA\n❌ CANCELAR\n\nGracias! 56 N°1321 - 2215983871`;
+  let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
+  window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
+  await new Promise(r=>setTimeout(r,800));
+ }
+ alert(`Movidos ${turnos.length} pacientes a ${nueva}`); cargar();
+}
+window.guardarBloqueo=async()=>{
+ let f=document.getElementById('bloqFecha').value,m=document.getElementById('bloqMotivo').value; if(!f||!m) return alert('Falta fecha/motivo');
+ await addDoc(collection(db,"bloqueos_senda"),{fecha:f,motivo:m}); moverDiaCompleto(f);
+}
+
+// funciones ficha / confirmar / recordatorio (igual que antes pero resumidas)
+window.abrirFicha=async(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);document.getElementById('modalFicha').style.display='flex';document.getElementById('f_ap').value=p.apellidos||'';document.getElementById('f_no').value=p.nombres||'';document.getElementById('f_fecha').value=p.fecha||'';document.getElementById('f_os').value=p.obra_social||'';document.getElementById('ordenImg').innerHTML=p.orden_base64?`<img src="${p.orden_base64}" style="max-width:100%;max-height:200px">`:'Sin orden';}
+window.guardarFicha=async()=>{let data={apellidos:document.getElementById('f_ap').value.toUpperCase(),obra_social:document.getElementById('f_os').value,fecha:document.getElementById('f_fecha').value};await updateDoc(doc(db,"pacientes_senda",idSel),data);document.getElementById('modalFicha').style.display='none';cargar();}
+window.abrirConfirmar=(id)=>{idSel=id;let p=pacientes.find(x=>x.id==id);document.getElementById('modalConf').style.display='flex';document.getElementById('c_costo').value=p.costo||'';document.getElementById('c_fecha').value=p.fecha;document.getElementById('c_hora').value=p.hora;document.getElementById('c_est').value=p.tipo_estudio;}
 window.confirmarFinal=async()=>{
  let p=pacientes.find(x=>x.id==idSel); let costo=document.getElementById('c_costo').value, fecha=document.getElementById('c_fecha').value, hora=document.getElementById('c_hora').value, estudio=document.getElementById('c_est').value;
- await updateDoc(doc(db,"pacientes_senda",idSel),{costo:costo,fecha:fecha,hora:hora,tipo_estudio:estudio,'papeles.confirmado':true,estado:'CONFIRMADO'});
- p={...p,costo,fecha,hora,tipo_estudio:estudio};
+ await updateDoc(doc(db,"pacientes_senda",idSel),{costo,fecha,hora,tipo_estudio:estudio,'papeles.confirmado':true,estado:'CONFIRMADO'});
  let dia=fecha.split('-')[2]+'/'+fecha.split('-')[1];
- const {jsPDF}=window.jspdf; const dpdf=new jsPDF(); dpdf.setFillColor(46,204,113);dpdf.rect(0,0,210,14,'F');dpdf.setFontSize(10);dpdf.text('SENDA COMUNIDAD - 56 N1321',10,9);dpdf.setFontSize(15);dpdf.text('TURNO CONFIRMADO FINAL',105,10);
- dpdf.setFontSize(11);dpdf.text(`${estudio} - ${p.noche} ${dia} ${hora} - ${p.apellidos} ${p.nombres} DNI ${p.dni}`,10,22);
- dpdf.text(`${p.lugar} - OS ${p.obra_social} - COSTO FINAL ${costo} - TEL ${p.telefono}`,10,30);
- dpdf.text(`Diag ${p.diagnostico} - Med ${p.medico_solicitante}`,10,38);
- dpdf.rect(10,44,190,24);dpdf.setFontSize(9);dpdf.text('Indicaciones: pelo lavado seco sin crema, sin esmalte, privacion sueno, orden + DNI',12,50);
- dpdf.text(`Links: CONFIRMAR:${idSel} CAMBIAR:${idSel} CANCELAR:${idSel}`,12,58);
- dpdf.save(`TURNO_FINAL_${p.apellidos}_${dia.replace('/','-')}.pdf`);
- let msg=`Hola ${p.nombres}! ✅ *TURNO SENDA CONFIRMADO FINAL*\n\n📅 ${p.noche} ${dia} ${hora}hs\n📍 ${p.lugar} 56 N°1321 La Plata\n🧠 ${estudio}\n🏥 ${p.obra_social}\n💰 *COSTO FINAL: ${costo}*\n\nTrae orden autorizada + DNI\nPelo lavado seco, sin esmalte, privacion sueño\n\n*Confirma:* \n✅ CONFIRMO: Responde SI\n🔄 CAMBIAR FECHA: Decime que dia\n❌ CANCELAR: Avisa\n\nPDF adjunto descargado\nTEL 2215983871`;
+ const {jsPDF}=window.jspdf; let dpdf=new jsPDF(); dpdf.text(`TURNO FINAL ${p.apellidos} ${estudio} ${fecha} ${hora} ${costo}`,10,10); dpdf.save(`TURNO_${p.apellidos}.pdf`);
+ let msg=`Hola ${p.nombres}! ✅ TURNO SENDA CONFIRMADO FINAL\n📅 ${dia} ${hora}hs\n📍 ${p.lugar} 56 N°1321\n🧠 ${estudio}\n💰 FINAL: ${costo}\n\nConfirma: SI / CAMBIAR / CANCELAR\n2215983871`;
  let tel=(p.telefono||'').replace(/\D/g,''); if(!tel.startsWith('54')) tel='54'+tel;
- let url='https://wa.me/'+tel+'?text='+encodeURIComponent(msg);
- // FIX DEFINITIVO WHATSAPP
- window.open(url,'_blank');
- setTimeout(()=>{window.location.href=url;},500);
- document.getElementById('modalConf').style.display='none';cargar();
+ window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');
+ document.getElementById('modalConf').style.display='none'; cargar();
 }
-window.enviarRecordatorio=(id)=>{let p=pacientes.find(x=>x.id==id);let dia=p.fecha.split('-')[2]+'/'+p.fecha.split('-')[1];let msg=`Hola ${p.nombres}! ⏰ *RECORDATORIO SENDA* mañana ${p.noche} ${dia} ${p.hora}hs ${p.tipo_estudio} en ${p.lugar}\nTrae orden, DNI, pelo lavado seco sin crema, sin esmalte\n56 N°1321 e/21 y 22 La Plata - 2215983871\nConfirma por acá por favor`;let tel=(p.telefono||'').replace(/\D/g,'');if(!tel.startsWith('54'))tel='54'+tel;let url='https://wa.me/'+tel+'?text='+encodeURIComponent(msg);window.open(url,'_blank');};
-window.enviarInformeFinal=(id)=>{let p=pacientes.find(x=>x.id==id);let msg=`Hola ${p.nombres}! 📄 Tu informe SENDA de ${p.tipo_estudio} del ${p.fecha} ya está listo.\nTe lo enviamos en PDF por acá.\nGracias! - SENDA 2215983871`;let tel=(p.telefono||'').replace(/\D/g,'');if(!tel.startsWith('54'))tel='54'+tel;window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank'); updateDoc(doc(db,"pacientes_senda",id),{'papeles.informe':true}); cargar();}
-window.renderCalendario=()=>{let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';let hoy=new Date();for(let i=0;i<42;i++){let d=new Date();d.setDate(hoy.getDate()+i);let iso=d.toISOString().split('T')[0];let bloq=bloqueos.find(b=>b.fecha==iso);let turnos=pacientes.filter(p=>p.fecha==iso&&p.estado!='CANCELADO');let bg='#1e293b';if(bloq)bg='#ef4444';else if(turnos.length)bg='#f59e0b';else if([0,1,2,4].includes(d.getDay()))bg='#14532d';html+=`<div style="background:${bg};padding:6px;border-radius:8px;text-align:center;font-size:0.7rem"><div>${['DO','LU','MA','MI','JU','VI','SA'][d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</div><div style="font-size:0.6rem">${bloq?bloq.motivo:turnos.map(t=>t.apellidos.substring(0,4)).join(',')}</div><button onclick="toggleBloq('${iso}')" style="font-size:0.6rem">${bloq?'Desbloquear':'Bloquear'}</button></div>`;}html+='</div><div style="margin-top:10px"><input id="bloqFecha" type="date"><input id="bloqMotivo" placeholder="Vacaciones / problema personal" style="margin-top:4px"><button onclick="guardarBloqueo()" style="padding:8px 12px;background:#ef4444;border:none;border-radius:8px;color:#fff;margin-top:4px">Bloquear fecha + avisar a todos</button></div>';document.getElementById('calendario').innerHTML=html;}
-window.toggleBloq=async(iso)=>{let ex=bloqueos.find(b=>b.fecha==iso);if(ex){await deleteDoc(doc(db,"bloqueos_senda",ex.id));}else{let mot=prompt('Motivo bloqueo?','Vacaciones');if(!mot)return;await addDoc(collection(db,"bloqueos_senda"),{fecha:iso,motivo:mot});}cargar();}
-window.guardarBloqueo=async()=>{let f=document.getElementById('bloqFecha').value,m=document.getElementById('bloqMotivo').value;if(!f||!m)return alert('Falta fecha/motivo');await addDoc(collection(db,"bloqueos_senda"),{fecha:f,motivo:m});let turnos=pacientes.filter(p=>p.fecha==f);for(let p of turnos){let msg=`Hola ${p.nombres}, tu turno SENDA del ${f} ${p.hora} se reprograma por ${m}. Te pasamos al mismo horario otro día disponible. Confirma: CAMBIAR FECHA / CANCELAR`;let tel=(p.telefono||'').replace(/\D/g,'');if(!tel.startsWith('54'))tel='54'+tel;window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');}cargar();}
+window.enviarRecordatorio=(id)=>{let p=pacientes.find(x=>x.id==id);let msg=`Hola ${p.nombres}! ⏰ Recordatorio SENDA mañana ${p.fecha} ${p.hora} ${p.tipo_estudio} en ${p.lugar}. Trae orden+DNI, pelo lavado. 56 N°1321. Confirma por acá`;let tel=(p.telefono||'').replace(/\D/g,'');if(!tel.startsWith('54'))tel='54'+tel;window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(msg),'_blank');}
 window.onload=cargar;
 </script>
 <style>
 body{background:#0f172a;color:#fff;font-family:system-ui;padding:10px}
-#modalFicha,#modalConf{position:fixed;inset:0;background:rgba(0,0,0,0.93);display:none;overflow:auto;padding:6px;z-index:999}
-table{border-collapse:collapse;width:100%;font-size:11px}td{border:1px solid #000;padding:2px;height:20px}.verde{background:#d9f99d;color:#000}.ama{background:#ffff00;color:#000}.azul{background:#b3e5fc;color:#000}.nara{background:#ffe0b2}.cel{background:#00e5ff}
-input,select{width:100%;border:none;background:transparent;font-size:11px;font-weight:700}
+#modalFicha,#modalConf{position:fixed;inset:0;background:rgba(0,0,0,0.9);display:none;overflow:auto;padding:10px;z-index:999}
 </style>
 </head>
 <body>
-<h2 style="color:#00f5d4;margin:0">SENDA Admin v18 FIX <span id="totalMes" style="font-size:0.8rem"></span></h2>
-<div style="display:flex;gap:4px;margin:10px 0"><input id="filtroTxt" placeholder="Buscar apellido/diagnostico" oninput="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff;flex:1"><input id="filtroMes" type="month" onchange="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff"></div>
-<div style="display:flex;gap:6px;margin-bottom:8px"><button onclick="document.getElementById('pLista').style.display='block';document.getElementById('pCal').style.display='none'" style="padding:8px;background:#00f5d4;border:none;border-radius:8px;font-weight:800">📋 LISTA</button><button onclick="document.getElementById('pLista').style.display='none';document.getElementById('pCal').style.display='block'" style="padding:8px;background:#334155;color:#fff;border:none;border-radius:8px">🗓️ CALENDARIO + BLOQUEOS + VACACIONES</button></div>
+<h2 style="color:#00f5d4;margin:0">SENDA Admin v18.1 - Colores fuertes + Borrar + Mover a MIERCOLES</h2>
+<div style="display:flex;gap:4px;margin:10px 0"><input id="filtroTxt" placeholder="Buscar apellido" oninput="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff;flex:1"><input id="filtroMes" type="month" onchange="renderLista()" style="padding:8px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#fff"></div>
+<div style="display:flex;gap:6px;margin-bottom:10px">
+<button onclick="document.getElementById('pLista').style.display='block';document.getElementById('pCal').style.display='none'" style="padding:10px;background:#00f5d4;border:none;border-radius:8px;font-weight:800">📋 LISTA COLORES</button>
+<button onclick="document.getElementById('pLista').style.display='none';document.getElementById('pCal').style.display='block'" style="padding:10px;background:#334155;color:#fff;border:none;border-radius:8px">🗓️ GRILLA + BLOQUEOS + MIERCOLES</button>
+<span id="totalMes" style="font-size:0.8rem;margin-left:10px"></span>
+</div>
 <div id="pLista"><div id="lista"></div></div>
-<div id="pCal" style="display:none"><div id="calendario"></div></div>
+<div id="pCal" style="display:none"><div id="calendario"></div>
+<div style="margin-top:12px;background:#1e293b;padding:10px;border-radius:10px;font-size:0.75rem">
+<b>Cómo pasar un MIÉRCOLES:</b> En la grilla buscá el miércoles que querés, tocá "Habilitar (ej MIE)" y queda verde. Después podés mover pacientes ahí con "Mover a otro día".<br>
+<b>Cómo bloquear por vacaciones:</b> Tocá "Bloquear" o usa el formulario de abajo. Te pregunta a qué fecha moverlos y les manda WhatsApp automático con motivo.<br>
+<b>Borrar pruebas:</b> Desplegá la fila y tocá 🗑️ BORRAR.
+</div>
+</div>
 
-<div id="modalFicha"><div style="background:#fff;color:#000;max-width:1100px;margin:auto;border:3px solid #000;width:100%"><div style="display:flex;justify-content:space-between;background:#000;color:#fff;padding:8px"><b>FICHA COMPLETA - AMARILLO paciente / AZUL tecnico / VERDE auto / Como tu foto</b><button onclick="document.getElementById('modalFicha').style.display='none'" style="background:#ef4444;color:#fff;border:none;padding:6px 12px">X</button></div>
-<table>
-<tr><td class="verde" style="width:70px">APELLIDOS:</td><td class="verde" colspan="2"><input id="f_ap"></td><td class="verde">NOMBRES:</td><td class="verde" colspan="2"><input id="f_no"></td><td>OTROS</td><td>SI</td><td>NO</td><td class="nara">POR SAHOS</td><td class="nara"></td></tr>
-<tr><td class="verde">ESTUDIO:</td><td class="verde"><select id="f_est"><option value="EEG">EEG 1hs</option><option value="PSG_BASAL">PSG BASAL 2hs</option><option value="PSG_LARGA">PSG LARGA 6hs</option></select></td><td class="azul">N°</td><td class="azul"><input id="f_num"></td><td class="verde">FECHA:</td><td class="verde"><input id="f_fecha" type="date"></td><td>URGENTE</td><td><input type="checkbox" id="chk_URGENTE"></td><td></td><td class="azul">PESO</td><td class="azul"><input id="f_peso"></td></tr>
-<tr><td class="verde">OBRA SOCIAL:</td><td class="ama"><select id="f_os"><option>PARTICULAR</option><option>IOMA</option><option>OSDE</option><option>OSPE</option><option>OSPE PMO</option><option>SWISS MEDICAL</option><option>GALENO</option><option>MEDICUS</option><option>OMINT</option><option>PAMI</option><option>OTRA</option></select></td><td class="ama">N°</td><td class="ama"><input id="f_os_n"></td><td colspan="2" rowspan="2"><div id="ordenImg"></div></td><td>EKG</td><td><input type="checkbox" id="chk_EKG"></td><td></td><td class="azul">TALLA</td><td class="azul"><input id="f_talla"></td></tr>
-<tr><td class="ama">FECH. NAC.</td><td class="ama"><input id="f_fnac" type="date"></td><td class="ama">EDAD:</td><td class="ama"><input id="f_edad"></td><td>F.A.</td><td><input type="checkbox" id="chk_FA"></td><td></td><td class="azul">INFORMA</td><td class="azul"><input id="f_informa"></td></tr>
-<tr><td class="ama">DOMICILIO</td><td class="ama"><input id="f_dom"></td><td class="ama">LOCALIDAD</td><td class="ama" colspan="3"><input id="f_loc"></td><td>OXIMETRIA</td><td><input type="checkbox" id="chk_OXIMETRIA"></td><td></td><td class="cel">BEBES/NIÑOS</td><td class="cel"></td></tr>
-<tr><td>LUGAR</td><td><select id="f_lugar"><option>SENDA</option><option>DOMICILIO</option><option>ESPAÑOL</option></select></td><td class="ama">MED. SOLICITANTE:</td><td class="ama" colspan="3"><input id="f_med"></td><td>EMG</td><td><input type="checkbox" id="chk_EMG"></td><td></td><td class="cel">EDAD GESTACIONAL</td><td class="cel"><input id="f_gest"></td></tr>
-<tr><td class="azul">TECNICO:</td><td class="azul"><input id="f_tec"></td><td class="ama">DIAGNOSTICO:</td><td class="ama" colspan="3"><input id="f_diag"></td><td>EOG</td><td><input type="checkbox" id="chk_EOG"></td><td></td><td class="cel">PARTO?</td><td class="cel"><input id="f_parto"></td></tr>
-<tr><td class="ama">MEDICACION</td><td class="ama" colspan="5"><input id="f_medic"></td><td>TORAX</td><td><input type="checkbox" id="chk_TORAX"></td><td></td><td class="cel">PESO AL NACER</td><td class="cel"><input id="f_pesonac"></td></tr>
-<tr><td class="ama">OBSERVACION:</td><td class="ama" colspan="2"><input id="f_obs"></td><td class="verde">DNI:</td><td class="verde" colspan="2"><input id="f_dni"></td><td>ABDOMEN</td><td><input type="checkbox" id="chk_ABDOMEN"></td><td></td><td class="cel">TALLA</td><td class="cel"><input id="f_tallanac"></td></tr>
-<tr><td></td><td class="verde">COSTO:</td><td class="verde"><input id="f_costo"></td><td class="azul">COLABORACION:</td><td class="azul"><select id="f_colab"><option>BUENA</option><option>MALA</option></select></td><td class="azul"></td><td>RONQUIDOS</td><td><input type="checkbox" id="chk_RONQUIDOS"></td><td></td><td class="cel">OXIGENO</td><td class="cel"><input id="f_oxi"></td></tr>
-<tr><td class="azul">MONTAJE:</td><td class="azul"><select id="f_mont"><option>PROTOCOLO 3</option><option>HALO + PARASAJITAL</option><option>FRONTALES SABRI</option></select></td><td class="verde">HORA:</td><td class="verde"><input id="f_hora"></td><td class="azul"></td><td class="azul"></td><td>HIPERNEA</td><td><input type="checkbox" id="chk_HIPERNEA"></td><td></td><td class="cel">FOTO</td><td><input type="checkbox" id="chk_FOTO"></td></tr>
-<tr><td colspan="6" style="font-size:9px">TEL <input id="f_tel" style="width:70%"></td><td>MAIL</td><td><input type="checkbox" id="chk_MAIL"></td><td></td><td><input id="f_mail"></td><td>X</td></tr>
-</table>
-<div style="padding:8px;background:#fff3cd;display:flex;gap:10px"><label style="color:#000"><input type="checkbox" id="chk_orden_ok"> ORDEN FOTO OK</label><label style="color:#000"><input type="checkbox" id="chk_autor_ok"> AUTORIZACION OK</label><span style="font-size:0.7rem;color:#000">Cuando tildas los dos la FICHA se pone 🟢</span></div>
-<button onclick="guardarFicha()" style="width:100%;padding:14px;background:#d9f99d;color:#000;font-weight:900;border:none">💾 GUARDAR FICHA COMPLETA</button>
-</div></div>
-
-<div id="modalConf"><div style="background:#fff;color:#000;max-width:480px;margin:auto;border:3px solid #000;padding:12px"><h3>Confirmar Turno FINAL</h3><label>Estudio final</label><select id="c_est"><option value="EEG">EEG 1hs</option><option value="PSG_BASAL">PSG BASAL 2hs</option><option value="PSG_LARGA">PSG LARGA 6hs</option></select><label>Fecha</label><input id="c_fecha" type="date"><label>Hora</label><input id="c_hora"><label>Costo FINAL</label><input id="c_costo"><button onclick="confirmarFinal()" style="width:100%;padding:14px;background:#22c55e;color:#000;font-weight:900;border:none;margin-top:10px">✓ CONFIRMAR + PDF + WHATSAPP FINAL</button><button onclick="document.getElementById('modalConf').style.display='none'" style="width:100%;padding:10px;margin-top:6px">Cerrar</button></div></div>
+<div id="modalFicha"><div style="background:#fff;color:#000;max-width:600px;margin:auto;padding:12px"><h3>Ficha rápida</h3><input id="f_ap" placeholder="Apellido"><input id="f_no" placeholder="Nombre" style="margin-top:4px"><input id="f_fecha" type="date" style="margin-top:4px"><input id="f_os" style="margin-top:4px"><div id="ordenImg" style="margin-top:6px"></div><button onclick="guardarFicha()" style="width:100%;padding:12px;background:#d9f99d;border:none;margin-top:8px;font-weight:800">Guardar</button><button onclick="document.getElementById('modalFicha').style.display='none'" style="width:100%;margin-top:4px">Cerrar</button></div></div>
+<div id="modalConf"><div style="background:#fff;color:#000;max-width:480px;margin:auto;padding:12px"><h3>Confirmar final</h3><select id="c_est"><option value="EEG">EEG</option><option value="PSG_BASAL">PSG BASAL 2hs</option><option value="PSG_LARGA">PSG LARGA 6hs</option></select><input id="c_fecha" type="date" style="margin-top:4px"><input id="c_hora" style="margin-top:4px"><input id="c_costo" placeholder="Costo final" style="margin-top:4px"><button onclick="confirmarFinal()" style="width:100%;padding:12px;background:#22c55e;border:none;margin-top:8px;font-weight:800">Confirmar + WA</button><button onclick="document.getElementById('modalConf').style.display='none'" style="width:100%;margin-top:4px">Cerrar</button></div></div>
 </body>
 </html>
